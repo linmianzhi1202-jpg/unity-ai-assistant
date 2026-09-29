@@ -1,0 +1,374 @@
+---
+name: unity-performance
+description: "Unity 性能优化正反例专项规则 — 涵盖 GC 管理、物理查询、渲染管线、内存分配、对象池等核心优化模式"
+version: 0.3.0
+severity: warning
+enabled: true
+category: engineering
+format: RULE.mdc
+references:
+  - source: "CCGS docs/engine-reference/unity/modules/physics.md"
+    extracted: "NonAlloc API、Compound Collider > Mesh Collider、Layer Collision Matrix"
+  - source: "CCGS docs/engine-reference/unity/modules/rendering.md"
+    extracted: "SRP Batcher、GPU Instancing、Occlusion Culling、GPU Resident Drawer"
+  - source: "CCGS docs/engine-reference/unity/current-best-practices.md"
+    extracted: "Burst + IJobParallelFor 20-100x、NativeArray、RenderMeshInstanced"
+  - source: "unity-specialist Agent 内存/GC 段"
+    extracted: "StringBuilder、Span<T>、避免装箱、Profiler.BeginSample"
+---
+
+# Unity 性能优化正反例专项规则
+
+## 核心原则
+
+Unity 性能优化的核心是**避免 GC 分配**和**减少 CPU 热路径开销**。本规则提炼自 CCGS 引擎参考和 unity-specialist Agent 标准，覆盖最常见性能陷阱。
+
+## 适用路径
+
+此规则适用于以下路径：
+- `Assets/Scripts/**`
+- `Assets/Shaders/**`
+
+---
+
+## 1. GC 分配管理
+
+### 1.1 避免热路径分配
+
+✅ **正确**（预分配 + 重用）：
+```csharp
+// 预分配缓存
+private List<Enemy> _nearbyEnemies = new List<Enemy>(16);
+private Collider[] _overlapResults = new Collider[32];
+
+void FixedUpdate() {
+    _nearbyEnemies.Clear();  // 清空重用，不重新分配
+    int count = Physics.OverlapSphereNonAlloc(
+        transform.position, detectionRadius, _overlapResults, enemyLayerMask);
+    for (int i = 0; i < count; i++) {
+        var enemy = _overlapResults[i].GetComponent<Enemy>();
+        if (enemy != null) _nearbyEnemies.Add(enemy);
+    }
+}
+```
+
+❌ **错误**（热路径中分配）：
+```csharp
+void FixedUpdate() {
+    var nearby = new List<Enemy>();  // 违规：每帧 GC 分配
+    var results = Physics.OverlapSphere(transform.position, radius);  // 违规：返回新数组
+}
+```
+
+### 1.2 字符串拼接
+
+✅ **正确**（StringBuilder）：
+```csharp
+using System.Text;
+
+private StringBuilder _sb = new StringBuilder(256);
+
+string BuildStatusText(string name, int score, float health) {
+    _sb.Clear();
+    _sb.Append(name);
+    _sb.Append(" - Score: ");
+    _sb.Append(score);
+    _sb.Append(" HP: ");
+    _sb.Append(health.ToString("F1"));
+    return _sb.ToString();
+}
+```
+
+❌ **错误**（字符串 + 拼接）：
+```csharp
+void Update() {
+    statusText.text = playerName + " - Score: " + score + " HP: " + health;
+    // 违规：每次 + 创建新字符串对象，GC 压力
+}
+```
+
+### 1.3 避免装箱
+
+✅ **正确**：
+```csharp
+// 使用泛型，避免值类型转 object
+int score = 100;
+Debug.Log($"Score: {score}");  // string interpolation 无装箱
+
+// 事件使用泛型
+public event Action<int> OnScoreChanged;  // 泛型，无装箱
+```
+
+❌ **错误**：
+```csharp
+// 违规：值类型装箱
+object boxedScore = 100;  // int → object 装箱
+Debug.Log(string.Format("Score: {0}", score));  // Format 内部装箱
+```
+
+---
+
+## 2. 物理查询优化
+
+### 2.1 NonAlloc API
+
+✅ **正确**：
+```csharp
+// Raycast — 无分配
+if (Physics.Raycast(origin, direction, out RaycastHit hit, maxDistance)) { }
+
+// 多结果 — NonAlloc 版本
+RaycastHit[] results = new RaycastHit[16];
+int hitCount = Physics.RaycastNonAlloc(origin, direction, results, maxDistance);
+
+// OverlapSphere — NonAlloc
+Collider[] overlapResults = new Collider[32];
+int count = Physics.OverlapSphereNonAlloc(center, radius, overlapResults);
+```
+
+❌ **错误**：
+```csharp
+RaycastHit[] hits = Physics.RaycastAll(origin, direction);  // 违规：每次分配新数组
+Collider[] colliders = Physics.OverlapSphere(center, radius);  // 违规：同上
+```
+
+### 2.2 LayerMask 过滤
+
+✅ **正确**：
+```csharp
+int enemyLayer = 1 << LayerMask.NameToLayer("Enemy");
+if (Physics.Raycast(origin, direction, out RaycastHit hit, maxDistance, enemyLayer)) { }
+```
+
+### 2.3 Compound Collider > Mesh Collider
+
+✅ **正确**：
+```csharp
+// 多个原始 Collider 组合（Box + Capsule + Sphere）
+// 性能：O(1) 碰撞检测
+```
+
+❌ **错误**：
+```csharp
+// 单个 Mesh Collider
+// 违规：O(n) 三角面遍历，仅用于静态几何
+```
+
+---
+
+## 3. 渲染优化
+
+### 3.1 SRP Batcher
+
+✅ **正确**（自动批处理 — URP Asset 启用）：
+```csharp
+// URP Asset > Advanced > SRP Batcher = Enabled
+// 相同 Shader Variant 的绘制自动批处理
+// 减少 CPU 渲染开销
+```
+
+### 3.2 GPU Instancing
+
+✅ **正确**（批量渲染相同网格）：
+```csharp
+Graphics.RenderMeshInstanced(
+    new RenderParams(material),
+    mesh,
+    0,
+    matrices  // NativeArray<Matrix4x4>
+);
+// 数千对象，极低 Draw Call
+```
+
+### 3.3 GPU Resident Drawer（Unity 6+）
+
+✅ **正确**（自动批处理数千对象）：
+```csharp
+// URP Asset > Rendering > GPU Resident Drawer = Enabled
+// 自动将渲染数据驻留 GPU，极大减少 CPU 开销
+```
+
+---
+
+## 4. 对象池
+
+✅ **正确**（`ObjectPool<T>`）：
+```csharp
+using UnityEngine.Pool;
+
+public class VFXPool : MonoBehaviour {
+    [SerializeField] private GameObject vfxPrefab;
+    private ObjectPool<GameObject> _pool;
+
+    void Awake() {
+        _pool = new ObjectPool<GameObject>(
+            createFunc: () => Instantiate(vfxPrefab),
+            actionOnGet: go => go.SetActive(true),
+            actionOnRelease: go => go.SetActive(false),
+            actionOnDestroy: Destroy,
+            defaultCapacity: 20,
+            maxSize: 100
+        );
+    }
+
+    public void Play(Vector3 position) {
+        var vfx = _pool.Get();
+        vfx.transform.position = position;
+        StartCoroutine(ReturnAfterDelay(vfx, 2f));
+    }
+
+    IEnumerator ReturnAfterDelay(GameObject go, float delay) {
+        yield return new WaitForSeconds(delay);
+        _pool.Release(go);
+    }
+}
+```
+
+❌ **错误**（频繁 Instantiate/Destroy）：
+```csharp
+void SpawnExplosion(Vector3 pos) {
+    var vfx = Instantiate(explosionPrefab, pos, Quaternion.identity);  // 违规：GC 压力
+    Destroy(vfx, 2f);  // 违规：销毁产生 GC
+}
+```
+
+---
+
+## 5. 性能分析
+
+### 5.1 Profiler 标记
+
+✅ **正确**：
+```csharp
+using UnityEngine.Profiling;
+
+void Update() {
+    Profiler.BeginSample("EnemyAI.Update");
+    // ... AI 逻辑
+    Profiler.EndSample();
+}
+```
+
+### 5.2 条件编译调试代码
+
+✅ **正确**：
+```csharp
+#if UNITY_EDITOR || DEVELOPMENT_BUILD
+    Debug.DrawRay(transform.position, direction, Color.red);
+    Debug.Log($"AI State: {_currentState}");
+#endif
+```
+
+❌ **错误**（生产代码中保留 Debug.Log）：
+```csharp
+void Update() {
+    Debug.Log($"Frame {Time.frameCount}");  // 违规：生产构建中仍有字符串分配
+}
+```
+
+---
+
+## 6. 废弃 API 替代清单（Unity 6.3 LTS）
+
+### Input 废弃
+
+| 废弃 API | 替代方案 |
+|----------|----------|
+| `Input.GetKey()` | `Keyboard.current[Key.X].isPressed` |
+| `Input.GetKeyDown()` | `Keyboard.current[Key.X].wasPressedThisFrame` |
+| `Input.GetMouseButton()` | `Mouse.current.leftButton.isPressed` |
+| `Input.GetAxis()` | `InputAction` 回调 |
+| `Input.mousePosition` | `Mouse.current.position.ReadValue()` |
+
+### UI 废弃
+
+| 废弃 API | 替代方案 |
+|----------|----------|
+| `Canvas` (UGUI) | `UIDocument` (UI Toolkit) |
+| `Text` 组件 | `TextMeshPro` 或 UI Toolkit `Label` |
+| `Image` 组件 | UI Toolkit `VisualElement` + background |
+
+### DOTS/Entities 废弃
+
+| 废弃 API | 替代方案 |
+|----------|----------|
+| `ComponentSystem` | `ISystem`（unmanaged） |
+| `JobComponentSystem` | `ISystem` + `IJobEntity` |
+| `ComponentDataFromEntity<T>` | `ComponentLookup<T>` |
+| `GameObjectEntity` | 纯 ECS 工作流 |
+
+### Rendering 废弃
+
+| 废弃 API | 替代方案 |
+|----------|----------|
+| `CommandBuffer.DrawMesh()` | RenderGraph API |
+| `Camera.SetReplacementShader()` | 自定义 Render Pass |
+| `OnPreRender()`/`OnPostRender()` | `RenderPipelineManager` 回调 |
+
+### Physics 废弃
+
+| 废弃 API | 替代方案 |
+|----------|----------|
+| `Physics.RaycastAll()` | `Physics.RaycastNonAlloc()` |
+| `Rigidbody.velocity`（直接写） | `Rigidbody.AddForce()` |
+
+### Asset Loading 废弃
+
+| 废弃 API | 替代方案 |
+|----------|----------|
+| `Resources.Load()` | Addressables |
+| 同步资源加载 | `Addressables.LoadAssetAsync()` |
+
+### 迁移代码示例
+
+```csharp
+// ❌ 废弃：Input.GetKey
+if (Input.GetKeyDown(KeyCode.Space)) { Jump(); }
+
+// ✅ 替代：Input System
+using UnityEngine.InputSystem;
+if (Keyboard.current.spaceKey.wasPressedThisFrame) { Jump(); }
+```
+
+```csharp
+// ❌ 废弃：Resources.Load
+var prefab = Resources.Load<GameObject>("Enemies/Goblin");
+
+// ✅ 替代：Addressables
+var handle = Addressables.LoadAssetAsync<GameObject>("Enemies/Goblin");
+await handle.Task;
+var prefab = handle.Result;
+```
+
+```csharp
+// ❌ 废弃：UGUI Text
+GetComponent<Text>().text = "Score: 100";
+
+// ✅ 替代：TextMeshPro
+GetComponent<TextMeshProUGUI>().text = "Score: 100";
+```
+
+---
+
+## 检查清单
+
+- [ ] 热路径无 GC 分配（预分配缓存、NonAlloc API、ObjectPool）
+- [ ] 字符串拼接使用 `StringBuilder`（热路径中禁止 `+` 拼接）
+- [ ] 物理查询使用 `NonAlloc` 版本（`RaycastNonAlloc`/`OverlapSphereNonAlloc`）
+- [ ] Compound Collider 替代 Mesh Collider（动态对象）
+- [ ] 使用 Layer Collision Matrix 减少不必要的碰撞检测
+- [ ] 启用 SRP Batcher + GPU Instancing + GPU Resident Drawer
+- [ ] 频繁创建/销毁的对象使用 `ObjectPool<T>`
+- [ ] 性能关键路径使用 `Profiler.BeginSample/EndSample`
+- [ ] Debug 代码使用 `#if UNITY_EDITOR || DEVELOPMENT_BUILD` 条件编译
+- [ ] Burst + IJobParallelFor 处理大规模并行计算（20-100x 加速）
+- [ ] 不使用 `Resources.Load`，改用 Addressables
+- [ ] 不使用 `Physics.RaycastAll`，改用 `RaycastNonAlloc`
+- [ ] 不使用 Legacy Input，改用 Input System
+
+## 版本历史
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| **v0.4.0** | 2026-04-29 | 灌入 deprecated-apis.md：新增 §6 废弃API替代清单（Input/UI/DOTS/Rendering/Physics/AssetLoading + 迁移代码示例） |
+| v0.3.0 | 2026-04-29 | 新建：从 CCGS physics/rendering/best-practices + unity-specialist Agent 提炼性能正反例 |

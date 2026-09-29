@@ -1,0 +1,193 @@
+---
+name: engine-code
+description: 引擎代码规则 — 所有引擎代码必须高性能、线程安全、API 稳定
+version: 0.3.0
+severity: warning
+enabled: true
+category: engineering
+format: RULE.mdc
+migrated_from: ref/Claude-Code-Game-Studios-main/.claude/rules/engine-code.md
+references:
+  - source: 'Claude Code Game Studios original rule: engine-code'
+    extracted: 所有引擎代码必须高性能、线程安全、API 稳定
+  - source: "CCGS docs/engine-reference/unity/modules/physics.md"
+    extracted: "NonAlloc API、AddForce vs velocity、RaycastNonAlloc vs RaycastAll"
+  - source: "CCGS docs/engine-reference/unity/modules/rendering.md"
+    extracted: "RenderGraph vs CommandBuffer、GPU Instancing、SRP Batcher"
+  - source: "CCGS docs/engine-reference/unity/current-best-practices.md"
+    extracted: "Burst + IJobParallelFor、NativeArray、ObjectPool<T>"
+---
+
+# 引擎代码规则
+
+## 规则说明
+
+所有引擎代码必须高性能、线程安全、API 稳定
+
+## 适用路径
+
+此规则适用于以下路径：
+- `src/core/**`
+- `Assets/Scripts/Core/**`
+- `Assets/Scripts/Engine/**`
+
+## 规则内容
+
+- ✅ 热路径中零分配（更新循环、渲染、物理）— 预分配、池化、重用
+- ✅ 所有引擎 API 必须是线程安全的，或明确文档化为单线程只读
+- ✅ 在优化之前 AND 之后进行性能分析 — 文档化测量数字
+- ✅ 引擎代码**永远不要**依赖游戏性代码（严格的依赖方向：engine ← gameplay）
+- ✅ 每个公共 API 必须在其文档注释中有使用示例
+- ✅ 公共接口变更需要弃用期和迁移指南
+- ✅ 对所有资源使用 RAII / 确定性清理（`IDisposable` + `using`）
+- ✅ 所有引擎系统必须支持优雅降级
+- ✅ 在编写引擎 API 代码之前，查阅 `docs/engine-reference/` 以获取当前引擎版本，并根据参考文档验证 API
+
+## 示例
+
+### 热路径零分配
+
+✅ **正确**（预分配缓存 + NonAlloc API）：
+```csharp
+// 预分配缓存数组，每帧重用
+private Collider[] _nearbyCache = new Collider[16];
+
+void FixedUpdate() {
+    _nearbyCache.Clear();  // 不是重新分配
+    int count = Physics.OverlapSphereNonAlloc(
+        transform.position, detectionRadius, _nearbyCache);
+    for (int i = 0; i < count; i++) {
+        ProcessCollider(_nearbyCache[i]);
+    }
+}
+
+// RaycastNonAlloc — 不分配数组
+private RaycastHit[] _raycastCache = new RaycastHit[8];
+
+bool TryRaycast(Vector3 origin, Vector3 dir, out RaycastHit hit) {
+    int hitCount = Physics.RaycastNonAlloc(origin, dir, _raycastCache, maxDistance);
+    if (hitCount > 0) { hit = _raycastCache[0]; return true; }
+    hit = default; return false;
+}
+```
+
+❌ **错误**（热路径中每帧分配）：
+```csharp
+void FixedUpdate() {
+    var nearby = new Collider[16];  // 违规：每帧分配
+    nearby = Physics.OverlapSphere(transform.position, radius);  // 违规：返回新数组
+}
+
+// RaycastAll 每次调用分配新数组
+RaycastHit[] hits = Physics.RaycastAll(origin, direction);  // 违规：GC 分配！
+```
+
+### 使用对象池替代 Instantiate/Destroy
+
+✅ **正确**（对象池）：
+```csharp
+using UnityEngine.Pool;
+
+public class ProjectileManager : MonoBehaviour {
+    [SerializeField] private Projectile prefab;
+    private ObjectPool<Projectile> _pool;
+
+    void Awake() {
+        _pool = new ObjectPool<Projectile>(
+            createFunc: () => Instantiate(prefab),
+            actionOnGet: p => p.gameObject.SetActive(true),
+            actionOnRelease: p => p.gameObject.SetActive(false),
+            actionOnDestroy: p => Destroy(p.gameObject),
+            defaultCapacity: 50
+        );
+    }
+
+    public Projectile Spawn() => _pool.Get();
+    public void Return(Projectile p) => _pool.Release(p);
+}
+```
+
+❌ **错误**（频繁实例化/销毁）：
+```csharp
+void Fire() {
+    var bullet = Instantiate(bulletPrefab, pos, rot);  // 违规：每次 GC 压力
+}
+
+void OnBulletHit(Bullet b) {
+    Destroy(b.gameObject);  // 违规：每次销毁触发 GC
+}
+```
+
+### Burst + Jobs 高性能计算
+
+✅ **正确**（Burst 编译 + IJobParallelFor）：
+```csharp
+[BurstCompile]
+struct ParticleUpdateJob : IJobParallelFor {
+    public NativeArray<float3> Positions;
+    public NativeArray<float3> Velocities;
+    public float DeltaTime;
+
+    public void Execute(int index) {
+        Positions[index] += Velocities[index] * DeltaTime;
+    }
+}
+
+// 调度
+var job = new ParticleUpdateJob {
+    Positions = positions,
+    Velocities = velocities,
+    DeltaTime = Time.deltaTime
+};
+job.Schedule(positions.Length, 64).Complete();
+```
+
+### NativeArray 替代托管数组（Jobs 中）
+
+✅ **正确**：
+```csharp
+using var data = new NativeArray<int>(1000, Allocator.TempJob);
+// ... 在 job 中使用
+// 自动 Dispose
+```
+
+❌ **错误**：
+```csharp
+int[] data = new int[1000];  // 违规：托管数组不能在 Burst job 中使用
+```
+
+### AddForce vs 直接写 velocity
+
+✅ **正确**（物理力）：
+```csharp
+Rigidbody rb = GetComponent<Rigidbody>();
+rb.AddForce(Vector3.forward * 10f, ForceMode.Impulse);
+```
+
+❌ **错误**（直接赋值破坏物理稳定性）：
+```csharp
+rb.velocity = new Vector3(0, 10, 0);  // 违规：仅在必要时使用
+```
+
+## 检查清单
+
+在提交相关代码前，请确认：
+
+- [ ] 热路径中零分配（预分配缓存、NonAlloc API、对象池）
+- [ ] 使用 `OverlapSphereNonAlloc` / `RaycastNonAlloc` 替代 `OverlapSphere` / `RaycastAll`
+- [ ] 使用 `ObjectPool<T>` 替代频繁 `Instantiate` / `Destroy`
+- [ ] 所有引擎 API 必须是线程安全的，或明确文档化为单线程只读
+- [ ] 在优化之前 AND 之后进行性能分析 — 文档化测量数字
+- [ ] 引擎代码**永远不要**依赖游戏性代码（严格的依赖方向：engine ← gameplay）
+- [ ] 每个公共 API 必须在其文档注释中有使用示例
+- [ ] 性能关键计算使用 Burst + IJobParallelFor
+- [ ] Jobs 中使用 NativeArray 而非托管数组
+- [ ] 物理操作使用 AddForce 而非直接写 velocity
+
+## 版本历史
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| **v0.3.0** | 2026-04-29 | 知识灌入：GDScript→C# 示例替换，新增 NonAlloc/ObjectPool/Burst+Jobs/AddForce 正反例，添加 Unity 适用路径 |
+| v0.2.0 | 2026-04-27 | 升级版本号，翻译英文内容，完善检查清单 |
+| v0.1.0 | 2026-04-26 | 从 Claude Code Game Studios 迁移并中文化 |

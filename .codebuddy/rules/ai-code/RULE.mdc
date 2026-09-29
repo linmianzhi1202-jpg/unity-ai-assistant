@@ -1,0 +1,88 @@
+---
+name: ai-code
+description: AI 代码规则 — 所有 AI 系统必须性能预算内、可调试、数据驱动参数
+version: 0.2.0
+severity: warning
+enabled: true
+category: engineering
+format: RULE.mdc
+migrated_from: ref/Claude-Code-Game-Studios-main/.claude/rules/ai-code.md
+references:
+  - source: 'Claude Code Game Studios original rule: ai-code'
+    extracted: 所有 AI 系统必须性能预算内、可调试、数据驱动参数
+---
+
+# AI 代码规则
+
+## 规则说明
+
+所有 AI 系统必须性能预算内、可调试、数据驱动参数
+
+## 适用路径
+
+此规则适用于以下路径：
+- `src/ai/**`
+- `Assets/Scripts/AI/**`
+- `Assets/Scripts/Gameplay/AI/**`
+
+## 规则内容
+
+- ✅ AI 更新预算：每帧最多 2ms — 使用性能分析验证
+- ✅ 所有 AI 参数必须从数据文件可调（行为树权重、感知范围、计时器）
+- ✅ AI 必须可调试：为所有 AI 状态实现可视化钩子（路径、感知锥、决策树）
+- ✅ AI 应该预示意图 — 玩家需要时间读取和反应
+- ✅ 优先使用基于效用或行为树方法，而不是硬编码的 if/else 链
+- ✅ 组 AI 必须支持编队、侧翼和角色分配（从数据）
+- ✅ 所有 AI 状态机必须记录转换以供调试
+- ✅ 永远不要信任来自网络的 AI 输入而不验证
+- ✅ Unity NavMeshAgent 参数必须通过 ScriptableObject 配置，不在代码中硬编码
+
+### 示例
+
+✅ **正确**（数据驱动 AI 配置）：
+```csharp
+[CreateAssetMenu(fileName = "AIConfig", menuName = "AI/AIConfig")]
+public class AIConfig : ScriptableObject {
+    public float detectionRadius = 10f;
+    public float attackRange = 2f;
+    public float chaseSpeed = 5f;
+    public float patrolSpeed = 2f;
+}
+
+public class EnemyAI : MonoBehaviour {
+    [SerializeField] private AIConfig _config;
+    private NavMeshAgent _agent;
+
+    void Awake() => _agent = GetComponent<NavMeshAgent>();
+
+    void ChaseTarget(Vector3 target) {
+        _agent.speed = _config.chaseSpeed;
+        _agent.SetDestination(target);
+    }
+}
+```
+
+❌ **错误**（硬编码 AI 参数）：
+```csharp
+void ChaseTarget(Vector3 target) {
+    GetComponent<NavMeshAgent>().speed = 5f;  // 违规：硬编码速度
+    GetComponent<NavMeshAgent>().SetDestination(target);  // 违规：每帧 GetComponent
+}
+```
+
+## 检查清单
+
+在提交相关代码前，请确认：
+
+- [ ] AI 更新预算：每帧最多 2ms — 使用性能分析验证
+- [ ] 所有 AI 参数必须从数据文件可调（行为树权重、感知范围、计时器）
+- [ ] AI 必须可调试：为所有 AI 状态实现可视化钩子（路径、感知锥、决策树）
+- [ ] AI 应该预示意图 — 玩家需要时间读取和反应
+- [ ] 优先使用基于效用或行为树方法，而不是硬编码的 if/else 链
+
+## 版本历史#
+
+| 版本 | 日期 | 变更 |
+|------|------|----------|
+| **v0.2.0** | 2026-04-27 | 升级版本号，翻译英文内容，完善检查清单 |
+| v0.1.0 | 2026-04-26 | 从 Claude Code Game Studios 迁移并中文化 |

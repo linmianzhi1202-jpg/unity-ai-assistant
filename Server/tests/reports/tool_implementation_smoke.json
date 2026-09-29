@@ -1,0 +1,16 @@
+{
+  "status": "passed",
+  "error": null,
+  "checks": [
+    "camera",
+    "texture",
+    "shader",
+    "vfx",
+    "animator_eight_actions",
+    "blend_motion",
+    "script_read",
+    "batch_failure",
+    "compiled_multistatement_execution",
+    "runtime_exception"
+  ]
+}

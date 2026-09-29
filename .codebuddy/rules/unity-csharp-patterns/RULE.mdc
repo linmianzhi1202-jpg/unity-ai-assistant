@@ -1,0 +1,354 @@
+---
+name: unity-csharp-patterns
+description: "Unity C# 编码正反例专项规则 — 涵盖 MonoBehaviour 生命周期、组件引用、内存安全、异步模式、DOTS/ECS 等核心模式"
+version: 0.3.0
+severity: warning
+enabled: true
+category: engineering
+format: RULE.mdc
+references:
+  - source: "CCGS docs/engine-reference/unity/current-best-practices.md"
+    extracted: "C# 9+ record/init、DOTS/ECS ISystem、Input System、Addressables async"
+  - source: "unity-specialist Agent 内嵌 C# 标准"
+    extracted: "GetComponent缓存、SerializeField、命名约定、FindObjectOfType禁令、ObjectPool"
+  - source: "Unity-Design-Pattern BadCodeExample.cs"
+    extracted: "策略模式反例、状态模式反例"
+---
+
+# Unity C# 编码正反例专项规则
+
+## 核心原则
+
+本规则提炼自 CCGS 引擎参考、unity-specialist Agent 标准和 Unity-Design-Pattern 反例，覆盖 Unity C# 开发中最常见的正/反模式。
+
+## 适用路径
+
+此规则适用于以下路径：
+- `Assets/Scripts/**`
+- `Assets/Plugins/**`
+
+---
+
+## 1. MonoBehaviour 生命周期
+
+### 1.1 组件引用缓存
+
+✅ **正确**（Awake 中缓存）：
+```csharp
+public class PlayerController : MonoBehaviour {
+    [SerializeField] private Rigidbody _rb;
+    [SerializeField] private Animator _animator;
+
+    void Awake() {
+        _rb = GetComponent<Rigidbody>();
+        _animator = GetComponent<Animator>();
+    }
+
+    void FixedUpdate() {
+        _rb.AddForce(Vector3.forward * speed);  // 使用缓存引用
+    }
+}
+```
+
+❌ **错误**（Update 中 GetComponent）：
+```csharp
+void Update() {
+    var rb = GetComponent<Rigidbody>();  // 违规：每帧调用 GetComponent
+    rb.AddForce(Vector3.forward * speed);
+}
+```
+
+### 1.2 Inspector 字段封装
+
+✅ **正确**（`[SerializeField] private`）：
+```csharp
+public class Enemy : MonoBehaviour {
+    [Header("Combat")]
+    [SerializeField] private float maxHealth = 100f;
+    [SerializeField] private float attackDamage = 10f;
+    [Tooltip("Detection radius in meters")]
+    [SerializeField] private float detectionRadius = 5f;
+}
+```
+
+❌ **错误**（`public` 字段暴露实现细节）：
+```csharp
+public class Enemy : MonoBehaviour {
+    public float maxHealth = 100f;      // 违规：public 字段
+    public float attackDamage = 10f;    // 违规：其他类可直接修改
+}
+```
+
+---
+
+## 2. 查找和引用
+
+### 2.1 禁止 Find/FindObjectOfType
+
+✅ **正确**（依赖注入 / 事件 / Service Locator）：
+```csharp
+// 方案 1：Inspector 注入
+[SerializeField] private GameManager _gameManager;
+
+// 方案 2：事件系统
+public static event Action<Player> OnPlayerSpawned;
+
+// 方案 3：注册表模式
+public class ServiceLocator : MonoBehaviour {
+    public static ServiceLocator Instance { get; private set; }
+    private Dictionary<Type, object> _services = new();
+
+    void Awake() => Instance = this;
+    public void Register<T>(T service) => _services[typeof(T)] = service;
+    public T Get<T>() => (T)_services[typeof(T)];
+}
+```
+
+❌ **错误**（Find/FindObjectOfType）：
+```csharp
+var player = FindObjectOfType<Player>();          // 违规：O(n) 全场景遍历
+var manager = GameObject.Find("GameManager");     // 违规：字符串查找，脆弱
+var target = GameObject.FindGameObjectWithTag("Enemy");  // 违规：性能差
+```
+
+### 2.2 SendMessage 禁令
+
+✅ **正确**（直接调用 / 事件 / 接口）：
+```csharp
+// 直接调用
+enemy.GetComponent<Health>().TakeDamage(10f);
+
+// 事件
+public static event Action<float> OnDamageDealt;
+
+// 接口
+IDamageable target = hitCollider.GetComponent<IDamageable>();
+target?.TakeDamage(10f);
+```
+
+❌ **错误**：
+```csharp
+gameObject.SendMessage("TakeDamage", 10f);  // 违规：反射调用，无编译期检查
+```
+
+---
+
+## 3. C# 9+ 现代特性（Unity 6 支持）
+
+### 3.1 Record 类型用于数据
+
+✅ **正确**：
+```csharp
+public record PlayerData(string Name, int Level, float Health);
+
+// 不可变数据，自动实现 Equals/ToString
+var data = new PlayerData("Hero", 1, 100f);
+var upgraded = data with { Level = 2 };  // 非破坏性修改
+```
+
+### 3.2 Init-only 属性
+
+✅ **正确**：
+```csharp
+public class WeaponConfig {
+    public string Name { get; init; }
+    public float Damage { get; init; }
+    public float Range { get; init; }
+}
+
+var sword = new WeaponConfig { Name = "Longsword", Damage = 25f, Range = 2f };
+```
+
+### 3.3 Pattern Matching
+
+✅ **正确**：
+```csharp
+var result = enemy switch {
+    Boss boss => boss.Enrage(),
+    Minion minion => minion.Flee(),
+    _ => null
+};
+```
+
+---
+
+## 4. DOTS/ECS 模式（Unity 6 生产可用）
+
+### 4.1 ISystem 替代 ComponentSystem
+
+✅ **正确**（unmanaged ISystem — Burst 兼容）：
+```csharp
+public partial struct MovementSystem : ISystem {
+    public void OnCreate(ref SystemState state) { }
+
+    public void OnUpdate(ref SystemState state) {
+        foreach (var (transform, speed) in
+            SystemAPI.Query<RefRW<LocalTransform>, RefRO<MoveSpeed>>()) {
+            transform.ValueRW.Position += speed.ValueRO.Value * SystemAPI.Time.DeltaTime;
+        }
+    }
+}
+```
+
+❌ **错误**（旧 ComponentSystem — 不支持 Burst）：
+```csharp
+public class MovementSystem : ComponentSystem {  // 违规：已弃用
+    protected override void OnUpdate() {
+        Entities.ForEach((ref Translation trans, in MoveSpeed speed) => {
+            trans.Value += speed.Value * Time.DeltaTime;
+        });
+    }
+}
+```
+
+### 4.2 IJobEntity 并行任务
+
+✅ **正确**：
+```csharp
+[BurstCompile]
+public partial struct DamageJob : IJobEntity {
+    public float DeltaTime;
+
+    void Execute(ref Health health, in DamageOverTime dot) {
+        health.Value -= dot.DamagePerSecond * DeltaTime;
+    }
+}
+
+var job = new DamageJob { DeltaTime = SystemAPI.Time.DeltaTime };
+job.ScheduleParallel();
+```
+
+---
+
+## 5. 异步资源加载
+
+### 5.1 Addressables 异步
+
+✅ **正确**：
+```csharp
+public async Task<GameObject> LoadEnemyAsync(string key) {
+    var handle = Addressables.LoadAssetAsync<GameObject>(key);
+    return await handle.Task;
+}
+
+// 使用 using 确保释放
+public async Task SpawnAndReleaseAsync(string key) {
+    var handle = Addressables.InstantiateAsync(key);
+    var enemy = await handle.Task;
+    // ... 使用 enemy
+    Addressables.ReleaseInstance(enemy);
+}
+```
+
+❌ **错误**（Resources.Load — 同步阻塞）：
+```csharp
+var prefab = Resources.Load<GameObject>("Enemies/Boss");  // 违规：同步加载阻塞主线程
+```
+
+---
+
+## 6. Unity 对象 null 检查
+
+✅ **正确**：
+```csharp
+// Unity 重载了 == 运算符，对销毁对象返回 true
+if (player == null) { /* 处理 */ }
+
+// 不要使用 is null — 对 Unity 对象无效
+```
+
+❌ **错误**：
+```csharp
+if (player is null) { }  // 违规：Unity 对象被销毁后 is null 返回 false
+```
+
+---
+
+## 7. 版本迁移感知（Unity 2022 LTS → Unity 6.3 LTS）
+
+### 7.1 DOTS/ECS 完整重写（高风险）
+
+```csharp
+// ❌ 旧版（Unity 2022，ComponentSystem 模式）
+public class DamageSystem : ComponentSystem { }
+
+// ✅ 新版（Unity 6+，ISystem — Burst 兼容）
+public partial struct DamageSystem : ISystem {
+    public void OnCreate(ref SystemState state) { }
+    public void OnUpdate(ref SystemState state) { }
+}
+```
+
+### 7.2 Input System 替换 Legacy Input（高风险）
+
+```csharp
+// ❌ 旧版：Input 类（已弃用）
+if (Input.GetKeyDown(KeyCode.Space)) { }
+
+// ✅ 新版：Input System 包
+using UnityEngine.InputSystem;
+if (Keyboard.current.spaceKey.wasPressedThisFrame) { }
+```
+
+### 7.3 RenderGraph 替代 CommandBuffer（高风险）
+
+```csharp
+// ❌ 旧版：ScriptableRenderPass.Execute
+public override void Execute(ScriptableRenderContext context, ref RenderingData data)
+
+// ✅ 新版：RenderGraph API
+public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData)
+```
+
+### 7.4 Addressables 异常处理变更（中风险）
+
+```csharp
+// ❌ 旧版：失败返回 null
+var handle = Addressables.LoadAssetAsync<Sprite>("key");
+var sprite = handle.Result; // null if failed
+
+// ✅ 新版：失败抛异常，需 try/catch
+try {
+    var handle = Addressables.LoadAssetAsync<Sprite>("key");
+    var sprite = await handle.Task;
+} catch (Exception e) {
+    Debug.LogError($"Failed to load: {e}");
+}
+```
+
+### 7.5 平台最低版本变更
+
+- **WebGL**: Unity 6.0+ 默认 WebGPU（WebGL 2.0 回退可用）
+- **Android**: 最低 API Level 提升至 24（Android 7.0）
+- **iOS**: 最低部署目标提升至 iOS 13
+
+### 迁移检查清单
+
+- [ ] 审计所有 DOTS/ECS 代码（可能需要完全重写）
+- [ ] 替换 `Input` 类为 Input System 包
+- [ ] 更新自定义渲染 Pass 为 RenderGraph API
+- [ ] 为 Addressables 调用添加异常处理
+- [ ] 测试物理行为（求解器迭代次数已变更）
+- [ ] 考虑将 UGUI 迁移到 UI Toolkit
+- [ ] 更新 WebGL 着色器以兼容 WebGPU
+- [ ] 验证平台最低版本（Android/iOS）
+
+---
+
+## 检查清单
+
+- [ ] 组件引用在 `Awake()` 中缓存，不在 `Update()` 中 `GetComponent`
+- [ ] Inspector 字段使用 `[SerializeField] private`，不用 `public`
+- [ ] 不使用 `Find()`、`FindObjectOfType()`、`SendMessage()`
+- [ ] Unity 对象用 `== null` 而非 `is null`
+- [ ] 使用 Addressables 异步加载，不用 `Resources.Load`
+- [ ] 性能关键系统考虑 DOTS/ECS（ISystem + IJobEntity）
+- [ ] 使用 C# 9+ record/init 模式定义数据
+- [ ] Unity 6 迁移：ISystem 替代 ComponentSystem、Input System 替代 Legacy Input、RenderGraph 替代 CommandBuffer
+
+## 版本历史
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| **v0.4.0** | 2026-04-29 | 灌入 breaking-changes.md：新增 §7 版本迁移感知（DOTS/Input/RenderGraph/Addressables/平台变更） |
+| v0.3.0 | 2026-04-29 | 新建：从 unity-specialist Agent + CCGS best-practices + Template BadCodeExample 提炼 |

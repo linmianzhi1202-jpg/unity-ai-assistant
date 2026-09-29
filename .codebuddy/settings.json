@@ -1,0 +1,819 @@
+{
+  "$schema": "https://codebuddy.ai/schemas/settings.json",
+  "version": "1.0.0",
+  "enhancement": {
+    "name": "unity-ai-assistant",
+    "phase": "product-v1.0.0",
+    "description": "Unity AI 开发助手 v1.0.0 — CodeBuddy 专业增强插件。包含 19 条专业规则（含 3 条 Unity 专项）、76 个专家技能（含 4 个 Unity 工作流）、54 个角色代理（含 Unity/Godot/UE 引擎专家）、10 个快捷命令（含 3 个 Unity 专项）。搭配 MCP 知识引擎（94 工具 + 知识图谱 + AI 资产生成）。"
+  },
+  "rules": {
+    "engineering-baseline": {
+      "enabled": true,
+      "severity": "warning",
+      "path": ".codebuddy/rules/engineering-baseline/RULE.mdc",
+      "note": "工程基线规则 — 禁止 unsafe_code、禁止 any、禁止未处理异常"
+    },
+    "frontend-state-debug": {
+      "enabled": true,
+      "severity": "suggestion",
+      "path": ".codebuddy/rules/frontend-state-debug/RULE.mdc",
+      "note": "前端状态调试规则 — 状态管理最佳实践"
+    },
+    "safe-refactor": {
+      "enabled": true,
+      "severity": "warning",
+      "path": ".codebuddy/rules/safe-refactor/RULE.mdc",
+      "note": "安全重构规则 — 小步提交、测试覆盖、回滚计划"
+    },
+    "test-coverage": {
+      "enabled": true,
+      "severity": "warning",
+      "path": ".codebuddy/rules/test-coverage/RULE.mdc",
+      "note": "测试覆盖率门控与质量标准"
+    },
+    "policy-executable": {
+      "enabled": true,
+      "severity": "warning",
+      "path": ".codebuddy/rules/policy-executable/RULE.mdc",
+      "note": "v1.0.0 对齐调整：策略检查清单（P1-P7 手动触发）"
+    },
+    "gameplay-code": {
+      "enabled": true,
+      "severity": "warning",
+      "path": ".codebuddy/rules/gameplay-code/RULE.mdc",
+      "note": "游戏性代码规则 — 数据驱动、帧率独立、无 UI 引用"
+    },
+    "engine-code": {
+      "enabled": true,
+      "severity": "warning",
+      "path": ".codebuddy/rules/engine-code/RULE.mdc",
+      "note": "引擎代码规则 — 性能、线程安全、API 稳定性"
+    },
+    "ai-code": {
+      "enabled": true,
+      "severity": "warning",
+      "path": ".codebuddy/rules/ai-code/RULE.mdc",
+      "note": "AI 代码规则 — 性能预算、可调试性、数据驱动参数"
+    },
+    "network-code": {
+      "enabled": true,
+      "severity": "warning",
+      "path": ".codebuddy/rules/network-code/RULE.mdc",
+      "note": "网络代码规则 — 服务器授权、版本化消息、安全"
+    },
+    "ui-code": {
+      "enabled": true,
+      "severity": "warning",
+      "path": ".codebuddy/rules/ui-code/RULE.mdc",
+      "note": "UI 代码规则 — 无游戏状态所有权、本地化就绪、可访问性"
+    },
+    "shader-code": {
+      "enabled": true,
+      "severity": "warning",
+      "path": ".codebuddy/rules/shader-code/RULE.mdc",
+      "note": "着色器代码规则 — 性能、可移植性、平台兼容性"
+    },
+    "data-files": {
+      "enabled": true,
+      "severity": "warning",
+      "path": ".codebuddy/rules/data-files/RULE.mdc",
+      "note": "数据文件规则 — JSON Schema、版本化、向后兼容"
+    },
+    "design-docs": {
+      "enabled": true,
+      "severity": "warning",
+      "path": ".codebuddy/rules/design-docs/RULE.mdc",
+      "note": "设计文档规则 — 8 个必需章节、公式格式、边缘情况"
+    },
+    "test-standards": {
+      "enabled": true,
+      "severity": "warning",
+      "path": ".codebuddy/rules/test-standards/RULE.mdc",
+      "note": "测试标准规则 — 命名规范、覆盖率要求、固件模式"
+    },
+    "prototype-code": {
+      "enabled": true,
+      "severity": "suggestion",
+      "path": ".codebuddy/rules/prototype-code/RULE.mdc",
+      "note": "原型代码规则 — README 必需、假设文档化、宽松标准"
+    },
+    "unity-csharp-patterns": {
+      "enabled": true,
+      "severity": "warning",
+      "path": ".codebuddy/rules/unity-csharp-patterns/RULE.mdc",
+      "note": "Unity C# 编码正反例专项规则 — MonoBehaviour 生命周期、组件引用、查找禁令、C# 9+ 特性、DOTS/ECS、异步加载"
+    },
+    "unity-performance": {
+      "enabled": true,
+      "severity": "warning",
+      "path": ".codebuddy/rules/unity-performance/RULE.mdc",
+      "note": "Unity 性能优化正反例专项规则 — GC 管理、物理查询优化、渲染管线、对象池、废弃 API 替代清单"
+    },
+    "unity-project-structure": {
+      "enabled": true,
+      "severity": "warning",
+      "path": ".codebuddy/rules/unity-project-structure/RULE.mdc",
+      "note": "Unity 项目结构规则 — .asmdef 分区、目录规范、C# 命名约定、模块边界"
+    }
+  },
+  "skills": {
+    "state-flow-auditor": {
+      "enabled": true,
+      "note": "状态流审计技能 — 9-lane 检查清单"
+    },
+    "commit-auditor": {
+      "enabled": true,
+      "note": "提交审计技能 — 提交规范检查"
+    },
+    "dependency-auditor": {
+      "enabled": true,
+      "note": "依赖安全与版本审计技能"
+    },
+    "documentation-generator": {
+      "enabled": true,
+      "note": "文档生成技能 — API/CHANGELOG/README/ADR 四种模式"
+    },
+    "cost-tracker": {
+      "enabled": true,
+      "note": "v1.0.0 对齐调整：成本估算与优化建议技能（估算模式）"
+    },
+    "mcp-connector": {
+      "enabled": true,
+      "note": "MCP 工具链集成技能 — 连接管理 + 工具发现 + 调用代理"
+    },
+    "parity-audit": {
+      "enabled": true,
+      "note": "Parity 审计框架 — 9-lane checkpoint 方法论"
+    },
+    "context-compactor": {
+      "enabled": true,
+      "note": "v1.0.0 对齐调整：上下文优化技能（手动建议模式）"
+    },
+    "brainstorm": {
+      "enabled": true,
+      "note": "头脑风暴技能 — 从零概念到结构化游戏概念文档"
+    },
+    "design-system": {
+      "enabled": true,
+      "note": "设计系统技能 — 按章节引导 GDD 编写"
+    },
+    "create-epics": {
+      "enabled": true,
+      "note": "创建史诗技能 — 将游戏概念分解为主要系统"
+    },
+    "create-stories": {
+      "enabled": true,
+      "note": "创建故事技能 — 将史诗分解为可操作任务"
+    },
+    "dev-story": {
+      "enabled": true,
+      "note": "开发故事技能 — 实现引导、代码审查门控"
+    },
+    "sprint-plan": {
+      "enabled": true,
+      "note": "迭代计划技能 — 规划冲刺、分配任务"
+    },
+    "code-review": {
+      "enabled": true,
+      "note": "代码审查技能 — 六维审查框架"
+    },
+    "design-review": {
+      "enabled": true,
+      "note": "设计审查技能 — GDD 验证、完整性检查"
+    },
+    "architecture-decision": {
+      "enabled": true,
+      "note": "架构决策技能 — ADR 编写、决策记录"
+    },
+    "qa-plan": {
+      "enabled": true,
+      "note": "QA 计划技能 — 测试策略、覆盖范围"
+    },
+    "art-bible": {
+      "enabled": true,
+      "note": "艺术圣经技能 — 视觉规范、风格指南"
+    },
+    "ux-design": {
+      "enabled": true,
+      "note": "UX 设计技能 — 界面设计、用户体验"
+    },
+    "prototype": {
+      "enabled": true,
+      "note": "原型技能 — 快速验证、核心循环测试"
+    },
+    "create-architecture": {
+      "enabled": true,
+      "note": "创建架构技能 — 主架构蓝图、必需 ADR 列表"
+    },
+    "map-systems": {
+      "enabled": true,
+      "note": "映射系统技能 — 分解概念为独立系统、依赖关系"
+    },
+    "gate-check": {
+      "enabled": true,
+      "note": "门控检查技能 — 阶段门控、准备情况验证"
+    },
+    "milestone-review": {
+      "enabled": true,
+      "note": "里程碑审查技能 — 进度评估、目标达成"
+    },
+    "retrospective": {
+      "enabled": true,
+      "note": "回顾技能 — 反思、改进点"
+    },
+    "bug-report": {
+      "enabled": true,
+      "note": "Bug 报告技能 — 结构化错误报告"
+    },
+    "bug-triage": {
+      "enabled": true,
+      "note": "Bug 分类技能 — 优先级排序、分配"
+    },
+    "release-checklist": {
+      "enabled": true,
+      "note": "发布检查清单技能 — 发布前验证"
+    },
+    "launch-checklist": {
+      "enabled": true,
+      "note": "启动检查清单技能 — 正式启动验证"
+    },
+    "changelog": {
+      "enabled": true,
+      "note": "变更日志技能 — 自动生成 CHANGELOG"
+    },
+    "patch-notes": {
+      "enabled": true,
+      "note": "补丁说明技能 — 版本更新说明"
+    },
+    "hotfix": {
+      "enabled": true,
+      "note": "热修复技能 — 紧急修复流程"
+    },
+    "balance-check": {
+      "enabled": true,
+      "note": "平衡检查技能 — 游戏性数值验证"
+    },
+    "content-audit": {
+      "enabled": true,
+      "note": "内容审计技能 — 内容完整性、质量检查"
+    },
+    "scope-check": {
+      "enabled": true,
+      "note": "范围检查技能 — 范围蠕变防护"
+    },
+    "perf-profile": {
+      "enabled": true,
+      "note": "性能分析技能 — 性能瓶颈检测"
+    },
+    "tech-debt": {
+      "enabled": true,
+      "note": "技术债务技能 — 债务识别、偿还计划"
+    },
+    "consistency-check": {
+      "enabled": true,
+      "note": "一致性检查技能 — 跨文档/代码一致性"
+    },
+    "security-audit": {
+      "enabled": true,
+      "note": "安全审计技能 — OWASP Top 10 检测"
+    },
+    "accessibility-audit": {
+      "enabled": true,
+      "note": "可访问性审计技能 — WCAG 合规性"
+    },
+    "localize": {
+      "enabled": true,
+      "note": "本地化技能 — 多语言支持、i18n"
+    },
+    "onboard": {
+      "enabled": true,
+      "note": "入职技能 — 新成员引导"
+    },
+    "start": {
+      "enabled": true,
+      "note": "开始技能 — 引导式入门流程"
+    },
+    "help": {
+      "enabled": true,
+      "note": "帮助技能 — 工作流程目录、导航"
+    },
+    "project-stage-detect": {
+      "enabled": true,
+      "note": "项目阶段检测技能 — 自动检测项目状态"
+    },
+    "setup-engine": {
+      "enabled": true,
+      "note": "设置引擎技能 — 配置游戏引擎"
+    },
+    "adopt": {
+      "enabled": true,
+      "note": "采用技能 — 将现有项目迁移到本模板"
+    },
+    "asset-spec": {
+      "enabled": true,
+      "note": "资产规格技能 — 资产创建规格"
+    },
+    "asset-audit": {
+      "enabled": true,
+      "note": "资产审计技能 — 资产质量、命名规范"
+    },
+    "reverse-document": {
+      "enabled": true,
+      "note": "逆向文档技能 — 从代码生成文档"
+    },
+    "playtest-report": {
+      "enabled": true,
+      "note": "试玩报告技能 — 玩家反馈收集"
+    },
+    "smoke-check": {
+      "enabled": true,
+      "note": "冒烟测试技能 — 基本功能验证"
+    },
+    "soak-test": {
+      "enabled": true,
+      "note": "浸泡测试技能 — 长时间稳定性测试"
+    },
+    "regression-suite": {
+      "enabled": true,
+      "note": "回归测试套件技能 — 回归测试自动化"
+    },
+    "test-setup": {
+      "enabled": true,
+      "note": "测试设置技能 — 测试框架搭建"
+    },
+    "test-helpers": {
+      "enabled": true,
+      "note": "测试辅助技能 — 测试工具、固件"
+    },
+    "test-evidence-review": {
+      "enabled": true,
+      "note": "测试证据审查技能 — 测试结果验证"
+    },
+    "test-flakiness": {
+      "enabled": true,
+      "note": "测试抖动技能 — 不稳定测试检测"
+    },
+    "skill-test": {
+      "enabled": true,
+      "note": "技能测试技能 — 验证自定义技能"
+    },
+    "skill-improve": {
+      "enabled": true,
+      "note": "技能改进技能 — 基于测试反馈改进技能"
+    },
+    "review-all-gdds": {
+      "enabled": true,
+      "note": "审查所有 GDD 技能 — 批量 GDD 验证"
+    },
+    "propagate-design-change": {
+      "enabled": true,
+      "note": "传播设计变更技能 — 级联更新"
+    },
+    "quick-design": {
+      "enabled": true,
+      "note": "快速设计技能 — 轻量级设计文档"
+    },
+    "estimate": {
+      "enabled": true,
+      "note": "估算技能 — 任务工作量估算"
+    },
+    "story-readiness": {
+      "enabled": true,
+      "note": "故事准备技能 — 开发前验证"
+    },
+    "story-done": {
+      "enabled": true,
+      "note": "故事完成技能 — 完成定义检查"
+    },
+    "sprint-status": {
+      "enabled": true,
+      "note": "迭代状态技能 — 进度跟踪"
+    },
+    "team-combat": {
+      "enabled": true,
+      "note": "团队战斗技能 — 多代理协作战斗系统"
+    },
+    "team-narrative": {
+      "enabled": true,
+      "note": "团队叙事技能 — 多代理协作叙事设计"
+    },
+    "team-ui": {
+      "enabled": true,
+      "note": "团队 UI 技能 — 多代理协作 UI 开发"
+    },
+    "team-release": {
+      "enabled": true,
+      "note": "团队发布技能 — 多代理协作发布流程"
+    },
+    "team-polish": {
+      "enabled": true,
+      "note": "团队打磨技能 — 多代理协作最终打磨"
+    },
+    "team-audio": {
+      "enabled": true,
+      "note": "团队音频技能 — 多代理协作音频实现"
+    },
+    "team-level": {
+      "enabled": true,
+      "note": "团队关卡技能 — 多代理协作关卡设计"
+    },
+    "team-live-ops": {
+      "enabled": true,
+      "note": "团队直播运营技能 — 多代理协作直播运营"
+    },
+    "team-qa": {
+      "enabled": true,
+      "note": "团队 QA 技能 — 多代理协作质量保证"
+    },
+    "create-control-manifest": {
+      "enabled": true,
+      "note": "创建控制清单技能 — 游戏控制映射文档"
+    },
+    "day-one-patch": {
+      "enabled": true,
+      "note": "首日补丁技能 — 发布后紧急修复"
+    },
+    "unity-editor-control": {
+      "enabled": true,
+      "note": "Unity 编辑器操控技能 — 场景/对象/组件/编辑器 4 类 MCP 工作流编排"
+    },
+    "unity-debug": {
+      "enabled": true,
+      "note": "Unity 调试诊断技能 — 编译/运行时/性能 3 个诊断工作流 + 错误码速查"
+    },
+    "unity-live-dev": {
+      "enabled": true,
+      "note": "Unity 实时开发循环技能 — 写代码→编译→测试→截图→修正 5 步闭环"
+    },
+    "unity-project-bootstrap": {
+      "enabled": true,
+      "note": "Unity 项目引导技能 — 4 种游戏模板 + 包配置清单 + manifest.json"
+    }
+  },
+  "agents": {
+    "bug-rootcause-investigator": {
+      "enabled": true,
+      "model": "default",
+      "note": "Bug 根因调查代理 — 证据链定位根因"
+    },
+    "security-scanner": {
+      "enabled": true,
+      "model": "default",
+      "note": "安全扫描代理 — OWASP Top 10 检测"
+    },
+    "code-reviewer": {
+      "enabled": true,
+      "model": "default",
+      "note": "代码审查代理 — 六维审查框架"
+    },
+    "coordinator": {
+      "enabled": true,
+      "model": "default",
+      "note": "v1.0.0 对齐调整：任务编排代理（串行模式，预置模板）"
+    },
+    "creative-director": {
+      "enabled": true,
+      "model": "opus",
+      "note": "创意总监代理 — Tier 1，最高创意权威"
+    },
+    "technical-director": {
+      "enabled": true,
+      "model": "opus",
+      "note": "技术总监代理 — Tier 1，技术决策权威"
+    },
+    "producer": {
+      "enabled": true,
+      "model": "opus",
+      "note": "制作人代理 — Tier 1，生产协调"
+    },
+    "game-designer": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "游戏设计师代理 — Tier 2，机制设计"
+    },
+    "lead-programmer": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "主程序代理 — Tier 2，技术领导"
+    },
+    "art-director": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "艺术总监代理 — Tier 2，视觉方向"
+    },
+    "audio-director": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "音频总监代理 — Tier 2，音频愿景"
+    },
+    "narrative-director": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "叙事总监代理 — Tier 2，故事连贯性"
+    },
+    "qa-lead": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "QA 负责人代理 — Tier 2，质量门控"
+    },
+    "release-manager": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "发布经理代理 — Tier 2，发布协调"
+    },
+    "localization-lead": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "本地化负责人代理 — Tier 2，多语言支持"
+    },
+    "gameplay-programmer": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "游戏性程序员代理 — Tier 3，机制实现"
+    },
+    "engine-programmer": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "引擎程序员代理 — Tier 3，引擎集成"
+    },
+    "ai-programmer": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "AI 程序员代理 — Tier 3，AI 系统实现"
+    },
+    "network-programmer": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "网络程序员代理 — Tier 3，多人功能"
+    },
+    "tools-programmer": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "工具程序员代理 — Tier 3，编辑器工具"
+    },
+    "ui-programmer": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "UI 程序员代理 — Tier 3，界面实现"
+    },
+    "systems-designer": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "系统设计师代理 — Tier 3，系统架构"
+    },
+    "level-designer": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "关卡设计师代理 — Tier 3，关卡创建"
+    },
+    "economy-designer": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "经济设计师代理 — Tier 3，经济系统"
+    },
+    "technical-artist": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "技术美术师代理 — Tier 3，渲染优化"
+    },
+    "sound-designer": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "音效设计师代理 — Tier 3，音频资产"
+    },
+    "writer": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "作家代理 — Tier 3，叙事内容"
+    },
+    "world-builder": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "世界构建师代理 — Tier 3，世界构建"
+    },
+    "ux-designer": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "UX 设计师代理 — Tier 3，用户体验"
+    },
+    "prototyper": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "原型师代理 — Tier 3，快速原型"
+    },
+    "performance-analyst": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "性能分析师代理 — Tier 3，性能优化"
+    },
+    "devops-engineer": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "DevOps 工程师代理 — Tier 3，CI/CD"
+    },
+    "analytics-engineer": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "分析工程师代理 — Tier 3，数据跟踪"
+    },
+    "security-engineer": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "安全工程师代理 — Tier 3，安全实现"
+    },
+    "qa-tester": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "QA 测试员代理 — Tier 3，测试执行"
+    },
+    "accessibility-specialist": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "可访问性专家代理 — Tier 3，WCAG 合规"
+    },
+    "live-ops-designer": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "直播运营设计师代理 — Tier 3，持续运营"
+    },
+    "community-manager": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "社区经理代理 — Tier 3，玩家参与"
+    },
+    "godot-specialist": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "Godot 专家代理 — Godot 4 引擎专家"
+    },
+    "godot-gdscript-specialist": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "Godot GDScript 专家代理 — GDScript 编程"
+    },
+    "godot-csharp-specialist": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "Godot C# 专家代理 — C# 集成"
+    },
+    "godot-gdextension-specialist": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "Godot GDExtension 专家代理 — C++ 扩展"
+    },
+    "godot-shader-specialist": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "Godot 着色器专家代理 — VisualShaders"
+    },
+    "unity-specialist": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "Unity 专家代理 — Unity 引擎专家"
+    },
+    "unity-dots-specialist": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "Unity DOTS 专家代理 — ECS 架构"
+    },
+    "unity-shader-specialist": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "Unity 着色器专家代理 — ShaderLab"
+    },
+    "unity-addressables-specialist": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "Unity Addressables 专家代理 — 资产管理"
+    },
+    "unity-ui-specialist": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "Unity UI 专家代理 — UI Toolkit"
+    },
+    "unreal-specialist": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "Unreal 专家代理 — UE5 引擎专家"
+    },
+    "ue-blueprint-specialist": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "UE 蓝图专家代理 — 可视化脚本"
+    },
+    "ue-gas-specialist": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "UE GAS 专家代理 — 游戏能力系统"
+    },
+    "ue-replication-specialist": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "UE 复制专家代理 — 网络复制"
+    },
+    "ue-umg-specialist": {
+      "enabled": true,
+      "model": "sonnet",
+      "note": "UE UMG 专家代理 — UI 小部件"
+    }
+  },
+  "hooks": {
+    "workspace-guard": {
+      "enabled": true,
+      "event": "PreToolUse",
+      "type": "prompt",
+      "matcher": "Write|Edit|replace_in_file|write_to_file",
+      "note": "工作区边界守卫 — 阻止对 workspace 外的写入操作"
+    },
+    "lint-gate": {
+      "enabled": true,
+      "event": "PostToolUse",
+      "type": "prompt",
+      "matcher": "replace_in_file|write_to_file",
+      "note": "Lint 门控 — 编辑后检查代码质量"
+    },
+    "change-log": {
+      "enabled": true,
+      "event": "PostToolUse",
+      "type": "prompt",
+      "matcher": "*",
+      "note": "变更审计日志 — 记录所有文件操作"
+    },
+    "security-gate": {
+      "enabled": true,
+      "event": "PreToolUse",
+      "type": "prompt",
+      "matcher": "Write|Edit|replace_in_file|write_to_file|delete_file|execute_command",
+      "note": "安全门控 — 实时检测敏感信息/危险命令/硬编码凭证"
+    },
+    "performance-monitor": {
+      "enabled": true,
+      "event": "PostToolUse",
+      "type": "prompt",
+      "matcher": "*",
+      "note": "v1.0.0 对齐调整：性能检查清单（手动触发）"
+    }
+  },
+  "commands": {
+    "review": {
+      "enabled": true,
+      "type": "prompt",
+      "path": ".codebuddy/commands/review.md",
+      "note": "代码审查快捷入口 → A3 code-reviewer"
+    },
+    "audit": {
+      "enabled": true,
+      "type": "prompt",
+      "path": ".codebuddy/commands/audit.md",
+      "note": "全量审计流水线 → S1+S2+S3+A2"
+    },
+    "secure": {
+      "enabled": true,
+      "type": "prompt",
+      "path": ".codebuddy/commands/secure.md",
+      "note": "安全扫描快捷入口 → A2 security-scanner"
+    },
+    "docs": {
+      "enabled": true,
+      "type": "prompt",
+      "path": ".codebuddy/commands/docs.md",
+      "note": "文档生成快捷入口 → S4 documentation-generator"
+    },
+    "status": {
+      "enabled": true,
+      "type": "prompt",
+      "path": ".codebuddy/commands/status.md",
+      "note": "系统健康仪表盘"
+    },
+    "compact": {
+      "enabled": true,
+      "type": "prompt",
+      "path": ".codebuddy/commands/compact.md",
+      "note": "上下文压缩快捷入口 → S8 context-compactor"
+    },
+    "cost": {
+      "enabled": true,
+      "type": "prompt",
+      "path": ".codebuddy/commands/cost.md",
+      "note": "成本报告快捷入口 → S7 cost-tracker"
+    },
+    "unity-review": {
+      "enabled": true,
+      "type": "prompt",
+      "path": ".codebuddy/commands/unity-review.md",
+      "note": "Unity C# 专项代码审查 → unity-csharp-patterns + unity-performance Rules"
+    },
+    "unity-perf": {
+      "enabled": true,
+      "type": "prompt",
+      "path": ".codebuddy/commands/unity-perf.md",
+      "note": "Unity 性能分析 → unity-performance Rule + GC/渲染/物理优化"
+    },
+    "unity-verify": {
+      "enabled": true,
+      "type": "prompt",
+      "path": ".codebuddy/commands/unity-verify.md",
+      "note": "Unity 增强层完整性验证 → Rules/Skills/Agents/MCP/Settings 5 维检查"
+    }
+  }
+}

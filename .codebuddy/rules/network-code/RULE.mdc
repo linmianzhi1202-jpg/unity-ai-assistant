@@ -1,0 +1,191 @@
+---
+name: network-code
+description: 网络代码规则 — 所有网络代码必须服务器授权、版本化消息、安全
+version: 0.3.0
+severity: warning
+enabled: true
+category: engineering
+format: RULE.mdc
+migrated_from: ref/Claude-Code-Game-Studios-main/.claude/rules/network-code.md
+references:
+  - source: 'Claude Code Game Studios original rule: network-code'
+    extracted: 所有网络代码必须服务器授权、版本化消息、安全
+  - source: "CCGS docs/engine-reference/unity/modules/networking.md"
+    extracted: "Netcode for GameObjects、ServerRpc/ClientRpc、NetworkVariable、服务器授权模式"
+---
+
+# 网络代码规则
+
+## 规则说明
+
+所有网络代码必须服务器授权、版本化消息、安全
+
+## 适用路径
+
+此规则适用于以下路径：
+- `src/networking/**`
+- `Assets/Scripts/Networking/**`
+- `Assets/Scripts/Multiplayer/**`
+
+## 规则内容
+
+- ✅ 服务器对所有游戏关键状态具有**权威性** — 永远不要信任客户端
+- ✅ 所有网络消息必须**版本化**，以实现前向/后向兼容性
+- ✅ 客户端本地预测，与服务器协调 — 实现误预测回滚
+- ✅ 优雅地处理断开连接、重新连接和主机迁移
+- ✅ 限制所有网络日志以防止日志泛滥
+- ✅ 所有网络值必须指定复制策略：可靠/不可靠、频率、插值
+- ✅ 带宽预算：定义和跟踪每消息类型的带宽使用
+- ✅ 安全：验证所有传入数据包大小和字段范围
+
+## 示例
+
+### 服务器授权模式（Netcode for GameObjects）
+
+✅ **正确**（服务器授权移动）：
+```csharp
+using Unity.Netcode;
+
+public class Player : NetworkBehaviour {
+    private NetworkVariable<Vector3> networkPosition = new NetworkVariable<Vector3>();
+
+    void Update() {
+        if (IsOwner) {
+            // 客户端：发送输入到服务器
+            Vector3 input = new Vector3(Input.GetAxis("Horizontal"), 0, Input.GetAxis("Vertical"));
+            MoveServerRpc(input);
+        }
+        // 所有客户端：同步到网络位置
+        transform.position = networkPosition.Value;
+    }
+
+    [ServerRpc]
+    void MoveServerRpc(Vector3 input) {
+        // 服务器：验证并应用移动
+        networkPosition.Value += input * Time.deltaTime * moveSpeed;
+    }
+}
+```
+
+❌ **错误**（客户端直接修改位置 — 无服务器验证）：
+```csharp
+void Update() {
+    if (IsOwner) {
+        transform.position += direction * speed * Time.deltaTime;  // 违规：客户端权威
+    }
+}
+```
+
+### NetworkVariable 同步状态
+
+✅ **正确**（自动同步 + 权限控制）：
+```csharp
+public class Player : NetworkBehaviour {
+    // 服务器写，客户端读（默认）
+    private NetworkVariable<int> health = new NetworkVariable<int>(100);
+
+    // Owner 写权限
+    private NetworkVariable<int> ammo = new NetworkVariable<int>(
+        default,
+        NetworkVariableReadPermission.Everyone,
+        NetworkVariableWritePermission.Owner
+    );
+
+    public override void OnNetworkSpawn() {
+        health.OnValueChanged += (oldVal, newVal) => {
+            Debug.Log($"Health: {oldVal} → {newVal}");
+            UpdateHealthUI(newVal);
+        };
+    }
+
+    [ServerRpc]
+    public void TakeDamageServerRpc(int damage) {
+        health.Value -= damage;  // 仅服务器可修改
+    }
+}
+```
+
+### ServerRpc / ClientRpc 模式
+
+✅ **正确**（ServerRpc 客户端→服务器，ClientRpc 服务器→所有客户端）：
+```csharp
+public class WeaponSystem : NetworkBehaviour {
+    [ServerRpc]
+    void FireWeaponServerRpc(Vector3 aimDirection) {
+        // 服务器验证并执行
+        if (!IsValidShot(aimDirection)) return;
+        DealDamageAt(aimDirection);
+        PlayExplosionClientRpc(aimDirection);  // 通知所有客户端
+    }
+
+    [ClientRpc]
+    void PlayExplosionClientRpc(Vector3 position) {
+        // 所有客户端播放特效
+        Instantiate(explosionPrefab, position, Quaternion.identity);
+    }
+}
+```
+
+### RPC 参数类型限制
+
+✅ **正确**（支持的类型）：
+```csharp
+[ServerRpc]
+void SetNameServerRpc(string playerName) { }
+
+[ClientRpc]
+void UpdateScoresClientRpc(int[] scores) { }
+
+// 传递 GameObject 引用
+[ServerRpc]
+void AttackTargetServerRpc(NetworkObjectReference targetRef) {
+    if (targetRef.TryGet(out NetworkObject target)) {
+        target.GetComponent<Health>().TakeDamage(10);
+    }
+}
+```
+
+❌ **错误**（不支持的类型）：
+```csharp
+[ServerRpc]
+void SetTargetServerRpc(GameObject target) { }  // 违规：不能直接传 GameObject
+```
+
+### 连接事件处理
+
+✅ **正确**：
+```csharp
+void Start() {
+    NetworkManager.Singleton.OnClientConnectedCallback += OnClientConnected;
+    NetworkManager.Singleton.OnClientDisconnectCallback += OnClientDisconnected;
+}
+
+void OnClientConnected(ulong clientId) {
+    Debug.Log($"Client {clientId} connected");
+}
+
+void OnClientDisconnected(ulong clientId) {
+    Debug.Log($"Client {clientId} disconnected");
+    // 清理资源、重新分配
+}
+```
+
+## 检查清单
+
+在提交相关代码前，请确认：
+
+- [ ] 服务器对所有游戏关键状态具有**权威性** — 使用 `[ServerRpc]` 验证客户端输入
+- [ ] 使用 `NetworkVariable<T>` 同步状态，而非手动 RPC 同步
+- [ ] 客户端本地预测，与服务器协调 — 实现误预测回滚
+- [ ] 优雅地处理断开连接（`OnClientDisconnectCallback`）
+- [ ] RPC 参数使用可序列化类型，不直接传 `GameObject`
+- [ ] 使用 `NetworkObjectReference` 传递网络对象引用
+- [ ] NetworkVariable 权限正确设置（Server/Owner 写权限）
+
+## 版本历史
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| **v0.3.0** | 2026-04-29 | 知识灌入：注入 Netcode for GameObjects 完整 C# 示例（ServerRpc/ClientRpc/NetworkVariable/连接事件），添加 Unity 适用路径 |
+| v0.2.0 | 2026-04-27 | 升级版本号，翻译英文内容，完善检查清单 |
+| v0.1.0 | 2026-04-26 | 从 Claude Code Game Studios 迁移并中文化 |

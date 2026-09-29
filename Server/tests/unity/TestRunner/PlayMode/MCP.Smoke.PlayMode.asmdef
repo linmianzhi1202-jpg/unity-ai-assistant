@@ -1,0 +1,8 @@
+{
+  "name": "MCP.Smoke.PlayMode",
+  "references": [],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "autoReferenced": false
+}

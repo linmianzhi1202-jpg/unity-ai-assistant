@@ -1,0 +1,281 @@
+---
+name: unity-project-structure
+description: "Unity 项目结构规则 — 定义 .asmdef 分区、Assets/Scripts/ 目录规范、C# 命名约定和模块边界"
+version: 0.1.0
+severity: warning
+enabled: true
+category: engineering
+format: RULE.mdc
+references:
+  - source: "CCGS docs/engine-reference/unity/current-best-practices.md"
+    extracted: "Assembly Definition 分区、Addressables 分组、ScriptableObject 配置层"
+  - source: "unity-specialist Agent 项目结构标准"
+    extracted: "Assets/Scripts/ 分区模式、命名约定、.asmdef 隔离策略"
+---
+
+# Unity 项目结构规则
+
+## 规则说明
+
+定义 Unity 项目的目录结构、Assembly Definition 分区、C# 命名约定和模块边界，确保大型项目可维护、编译快、依赖清晰。
+
+## 适用路径
+
+此规则适用于以下路径：
+- `Assets/Scripts/**`
+- `Assets/Plugins/**`
+- `Assets/**`
+
+---
+
+## 1. 目录结构规范
+
+### 1.1 推荐目录布局
+
+```
+Assets/
+├── Scripts/                    # 所有 C# 脚本
+│   ├── Core/                   # 核心系统（单例、事件总线、服务定位器）
+│   ├── Gameplay/               # 游戏性系统（战斗、移动、AI）
+│   │   ├── Combat/
+│   │   ├── Movement/
+│   │   └── AI/
+│   ├── UI/                     # UI 视图和视图模型
+│   ├── Data/                   # ScriptableObject 配置和数据模型
+│   ├── Networking/             # 网络和多玩家代码
+│   ├── Engine/                 # 引擎扩展（自定义渲染、工具类）
+│   └── Utilities/              # 通用工具类（扩展方法、数学库）
+├── Prefabs/                    # 预制体（按功能分区）
+│   ├── Characters/
+│   ├── Weapons/
+│   └── UI/
+├── ScriptableObjects/          # ScriptableObject 实例资产
+│   ├── Configs/
+│   └── GameData/
+├── Addressables/               # Addressables 组
+│   ├── Characters/
+│   ├── Environments/
+│   └── UI/
+├── Shaders/                    # 着色器和材质
+├── Animations/                 # 动画剪辑和控制器
+├── Art/                        # 美术资产
+│   ├── Models/
+│   ├── Textures/
+│   └── Audio/
+├── Scenes/                     # 场景文件
+│   ├── MainMenu.unity
+│   ├── Gameplay.unity
+│   └── Testing/
+├── Data/                       # JSON/CSV 数据文件
+├── Plugins/                    # 第三方插件
+└── Tests/                      # 测试
+    ├── EditMode/
+    └── PlayMode/
+```
+
+### 1.2 禁止的目录模式
+
+❌ **错误**：
+```
+Assets/Scripts/Helpers/          # 禁止：模糊的"Helpers"目录
+Assets/Scripts/Utils/            # 禁止：过于通用的分类
+Assets/Scripts/Misc/             # 禁止："其他"类目录是代码味道
+Assets/MyScripts/                # 禁止：非标准命名
+Assets/Scripts/Test.cs           # 禁止：脚本直接放在根目录
+```
+
+---
+
+## 2. Assembly Definition (.asmdef) 分区
+
+### 2.1 分区原则
+
+- 每个功能模块**必须**有自己的 `.asmdef`
+- 依赖方向：`Gameplay → Core`，`UI → Core`，`Gameplay ↛ UI`（严格单向）
+- 测试程序集与生产代码分离
+
+### 2.2 推荐程序集结构
+
+```
+Scripts/
+├── Core/               → Company.Game.Core.asmdef
+├── Gameplay/           → Company.Game.Gameplay.asmdef (引用 Core)
+├── UI/                 → Company.Game.UI.asmdef (引用 Core)
+├── Networking/         → Company.Game.Networking.asmdef (引用 Core, Gameplay)
+├── Engine/             → Company.Game.Engine.asmdef (引用 Core)
+└── Tests/
+    ├── EditMode/       → Company.Game.Tests.EditMode.asmdef (引用 Core, Gameplay)
+    └── PlayMode/       → Company.Game.Tests.PlayMode.asmdef (引用 Core, Gameplay)
+```
+
+### 2.3 .asmdef 配置要点
+
+✅ **正确**：
+```json
+{
+    "name": "Company.Game.Gameplay",
+    "rootNamespace": "Company.Game.Gameplay",
+    "references": ["Company.Game.Core"],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}
+```
+
+❌ **错误**：
+```json
+{
+    "name": "Gameplay",  // 违规：无公司前缀，命名空间冲突风险
+    "references": [],     // 违规：未显式声明依赖
+    "allowUnsafeCode": true  // 违规：除非有 team-level 审批
+}
+```
+
+---
+
+## 3. C# 命名约定
+
+### 3.1 文件命名
+
+| 类型 | 命名规则 | 示例 |
+|------|----------|------|
+| MonoBehaviour 脚本 | `PascalCase.cs` | `PlayerController.cs` |
+| ScriptableObject | `PascalCase.cs` | `CombatConfig.cs` |
+| 接口 | `IPascalCase.cs` | `IDamageable.cs` |
+| 枚举 | `PascalCase.cs` | `PlayerState.cs` |
+| 静态工具类 | `PascalCase.cs` | `MathUtils.cs` |
+| Editor 工具 | `PascalCaseEditor.cs` | `GridEditor.cs` |
+| Editor 窗口 | `PascalCaseWindow.cs` | `LevelEditorWindow.cs` |
+
+### 3.2 字段命名
+
+```csharp
+// ✅ 正确
+[SerializeField] private float _moveSpeed = 5f;          // 私有字段：_camelCase
+[SerializeField] private Rigidbody _rb;                   // 缩写也用 _camelCase
+public event Action<float> OnHealthChanged;               // 事件：PascalCase
+public const int MAX_ENEMIES = 50;                        // 常量：UPPER_SNAKE_CASE
+public static readonly Dictionary<State, HashSet<State>> Transitions = new();  // 静态只读：PascalCase
+
+// ❌ 错误
+public float moveSpeed = 5f;          // 违规：public 字段
+private float speed;                   // 违规：无下划线前缀
+[SerializeField] private float _MoveSpeed;  // 违规：私有字段不用 PascalCase
+```
+
+### 3.3 命名空间
+
+```csharp
+// ✅ 正确：与 .asmdef 名称对应
+namespace Company.Game.Gameplay.Combat {
+    public class CombatSystem : MonoBehaviour { }
+}
+
+// ❌ 错误：无命名空间
+public class CombatSystem : MonoBehaviour { }  // 违规：全局命名空间污染
+```
+
+---
+
+## 4. 模块边界规则
+
+### 4.1 依赖方向
+
+```
+UI ──────────→ Core ←──────── Gameplay
+                                   ↑
+Networking ───→ Core ←──────── Engine
+```
+
+- **Core** 可被所有模块引用，但不引用任何模块
+- **Gameplay** 可引用 Core，禁止引用 UI
+- **UI** 可引用 Core，禁止引用 Gameplay
+- **Networking** 可引用 Core 和 Gameplay，禁止引用 UI
+- **Engine** 可引用 Core，禁止引用 Gameplay 或 UI
+
+### 4.2 跨模块通信
+
+✅ **正确**（事件系统 / 接口）：
+```csharp
+// Core 定义事件
+public static class GameEvents {
+    public static event Action<float> OnHealthChanged;
+    public static event Action OnPlayerDied;
+}
+
+// Gameplay 触发事件
+GameEvents.OnHealthChanged?.Invoke(newHealth);
+
+// UI 订阅事件
+void OnEnable() => GameEvents.OnHealthChanged += UpdateHealthBar;
+void OnDisable() => GameEvents.OnHealthChanged -= UpdateHealthBar;
+```
+
+❌ **错误**（直接引用跨模块类型）：
+```csharp
+// UI 引用 Gameplay 类型（违反依赖方向）
+using Company.Game.Gameplay.Combat;  // 违规：UI 不应引用 Gameplay
+
+public class HealthBarUI : MonoBehaviour {
+    private CombatSystem _combat;  // 违规：紧耦合
+}
+```
+
+---
+
+## 5. ScriptableObject 配置层
+
+### 5.1 配置与逻辑分离
+
+✅ **正确**：
+```csharp
+// Data/CombatConfig.cs — 纯数据定义
+[CreateAssetMenu(fileName = "CombatConfig", menuName = "Config/CombatConfig")]
+public class CombatConfig : ScriptableObject {
+    public float baseDamage;
+    public float criticalMultiplier;
+    public float attackCooldown;
+}
+
+// Gameplay/Combat/CombatSystem.cs — 纯逻辑
+public class CombatSystem : MonoBehaviour {
+    [SerializeField] private CombatConfig _config;
+
+    public float CalculateDamage(float multiplier)
+        => _config.baseDamage * multiplier;
+}
+```
+
+❌ **错误**（数据与逻辑混合）：
+```csharp
+public class CombatConfig : ScriptableObject {
+    public float baseDamage;
+    public void ApplyDamage(Enemy target) { }  // 违规：SO 不应包含逻辑
+}
+```
+
+---
+
+## 检查清单
+
+- [ ] 目录结构遵循 `Assets/Scripts/{Core,Gameplay,UI,Data,Networking,Engine,Utilities}/` 模式
+- [ ] 无 `Helpers/`、`Utils/`、`Misc/` 等模糊目录
+- [ ] 每个功能模块有 `.asmdef`，命名包含公司前缀
+- [ ] 依赖方向正确（Gameplay → Core，UI → Core，Gameplay ↛ UI）
+- [ ] 私有字段使用 `_camelCase` 前缀，Inspector 字段使用 `[SerializeField] private`
+- [ ] 所有 C# 文件有命名空间，与 `.asmdef` 名称对应
+- [ ] 跨模块通信通过事件/接口，不直接引用
+- [ ] ScriptableObject 只包含数据，不包含逻辑
+- [ ] 文件命名遵循 `PascalCase.cs` 规则
+
+## 版本历史
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| **v0.1.0** | 2026-04-29 | 新建：从 CCGS best-practices + unity-specialist Agent 提炼项目结构规范 |

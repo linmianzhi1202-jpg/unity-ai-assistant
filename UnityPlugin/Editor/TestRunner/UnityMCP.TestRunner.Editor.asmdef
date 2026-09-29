@@ -1,0 +1,12 @@
+{
+  "name": "UnityMCP.TestRunner.Editor",
+  "references": [
+    "UnityEditor.TestRunner",
+    "UnityEngine.TestRunner",
+    "Unity.Newtonsoft.Json"
+  ],
+  "includePlatforms": [
+    "Editor"
+  ],
+  "autoReferenced": true
+}

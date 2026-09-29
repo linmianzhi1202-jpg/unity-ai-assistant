@@ -1,0 +1,270 @@
+[
+  {
+    "id": "exact_api-01",
+    "category": "exact_api",
+    "query": "GameObject.AddComponent",
+    "expected_terms": [
+      "GameObject",
+      "AddComponent"
+    ]
+  },
+  {
+    "id": "exact_api-02",
+    "category": "exact_api",
+    "query": "GameObject.GetComponent",
+    "expected_terms": [
+      "GameObject",
+      "GetComponent"
+    ]
+  },
+  {
+    "id": "exact_api-03",
+    "category": "exact_api",
+    "query": "Transform.Translate",
+    "expected_terms": [
+      "Transform",
+      "Translate"
+    ]
+  },
+  {
+    "id": "exact_api-04",
+    "category": "exact_api",
+    "query": "Rigidbody.AddForce",
+    "expected_terms": [
+      "Rigidbody",
+      "AddForce"
+    ]
+  },
+  {
+    "id": "exact_api-05",
+    "category": "exact_api",
+    "query": "Physics.Raycast",
+    "expected_terms": [
+      "Physics",
+      "Raycast"
+    ]
+  },
+  {
+    "id": "exact_api-06",
+    "category": "exact_api",
+    "query": "Object.Instantiate",
+    "expected_terms": [
+      "Instantiate"
+    ]
+  },
+  {
+    "id": "exact_api-07",
+    "category": "exact_api",
+    "query": "SceneManager.LoadScene",
+    "expected_terms": [
+      "SceneManager",
+      "LoadScene"
+    ]
+  },
+  {
+    "id": "exact_api-08",
+    "category": "exact_api",
+    "query": "Animator.SetTrigger",
+    "expected_terms": [
+      "Animator",
+      "SetTrigger"
+    ]
+  },
+  {
+    "id": "exact_api-09",
+    "category": "exact_api",
+    "query": "Input.GetKeyDown",
+    "expected_terms": [
+      "Input",
+      "GetKeyDown"
+    ]
+  },
+  {
+    "id": "exact_api-10",
+    "category": "exact_api",
+    "query": "Camera.ScreenPointToRay",
+    "expected_terms": [
+      "Camera",
+      "ScreenPointToRay"
+    ]
+  },
+  {
+    "id": "chinese_intent-11",
+    "category": "chinese_intent",
+    "query": "如何给物体添加刚体组件",
+    "expected_terms": [
+      "AddComponent",
+      "Rigidbody"
+    ]
+  },
+  {
+    "id": "chinese_intent-12",
+    "category": "chinese_intent",
+    "query": "如何获取物体上的碰撞器",
+    "expected_terms": [
+      "GetComponent",
+      "Collider"
+    ]
+  },
+  {
+    "id": "chinese_intent-13",
+    "category": "chinese_intent",
+    "query": "如何设置物体的世界坐标",
+    "expected_terms": [
+      "Transform",
+      "position"
+    ]
+  },
+  {
+    "id": "chinese_intent-14",
+    "category": "chinese_intent",
+    "query": "如何通过力推动刚体",
+    "expected_terms": [
+      "Rigidbody",
+      "AddForce"
+    ]
+  },
+  {
+    "id": "chinese_intent-15",
+    "category": "chinese_intent",
+    "query": "如何检测鼠标射线击中了什么",
+    "expected_terms": [
+      "Physics",
+      "Raycast"
+    ]
+  },
+  {
+    "id": "chinese_intent-16",
+    "category": "chinese_intent",
+    "query": "如何复制一个预制体实例",
+    "expected_terms": [
+      "Instantiate"
+    ]
+  },
+  {
+    "id": "chinese_intent-17",
+    "category": "chinese_intent",
+    "query": "如何切换到指定场景",
+    "expected_terms": [
+      "SceneManager",
+      "LoadScene"
+    ]
+  },
+  {
+    "id": "chinese_intent-18",
+    "category": "chinese_intent",
+    "query": "如何触发角色动画状态",
+    "expected_terms": [
+      "Animator",
+      "SetTrigger"
+    ]
+  },
+  {
+    "id": "chinese_intent-19",
+    "category": "chinese_intent",
+    "query": "如何检测按键刚按下的一帧",
+    "expected_terms": [
+      "Input",
+      "GetKeyDown"
+    ]
+  },
+  {
+    "id": "chinese_intent-20",
+    "category": "chinese_intent",
+    "query": "如何把屏幕坐标变成世界射线",
+    "expected_terms": [
+      "Camera",
+      "ScreenPointToRay"
+    ]
+  },
+  {
+    "id": "api_relationship-21",
+    "category": "api_relationship",
+    "query": "GameObject Transform component relationship",
+    "expected_terms": [
+      "GameObject",
+      "Transform"
+    ]
+  },
+  {
+    "id": "api_relationship-22",
+    "category": "api_relationship",
+    "query": "Collider Rigidbody collision relationship",
+    "expected_terms": [
+      "Collider",
+      "Rigidbody"
+    ]
+  },
+  {
+    "id": "api_relationship-23",
+    "category": "api_relationship",
+    "query": "MonoBehaviour Awake Start execution order",
+    "expected_terms": [
+      "Awake",
+      "Start"
+    ]
+  },
+  {
+    "id": "api_relationship-24",
+    "category": "api_relationship",
+    "query": "Update FixedUpdate Rigidbody physics relationship",
+    "expected_terms": [
+      "FixedUpdate",
+      "Rigidbody"
+    ]
+  },
+  {
+    "id": "api_relationship-25",
+    "category": "api_relationship",
+    "query": "Animator RuntimeAnimatorController relationship",
+    "expected_terms": [
+      "Animator",
+      "RuntimeAnimatorController"
+    ]
+  },
+  {
+    "id": "api_relationship-26",
+    "category": "api_relationship",
+    "query": "MeshFilter MeshRenderer sharedMesh relationship",
+    "expected_terms": [
+      "MeshFilter",
+      "MeshRenderer"
+    ]
+  },
+  {
+    "id": "api_relationship-27",
+    "category": "api_relationship",
+    "query": "Camera ScreenPointToRay Physics Raycast relationship",
+    "expected_terms": [
+      "ScreenPointToRay",
+      "Raycast"
+    ]
+  },
+  {
+    "id": "api_relationship-28",
+    "category": "api_relationship",
+    "query": "GameObject SetActive activeSelf activeInHierarchy relationship",
+    "expected_terms": [
+      "activeSelf",
+      "activeInHierarchy"
+    ]
+  },
+  {
+    "id": "api_relationship-29",
+    "category": "api_relationship",
+    "query": "Object Instantiate Destroy lifecycle relationship",
+    "expected_terms": [
+      "Instantiate",
+      "Destroy"
+    ]
+  },
+  {
+    "id": "api_relationship-30",
+    "category": "api_relationship",
+    "query": "SceneManager LoadScene AsyncOperation LoadSceneAsync relationship",
+    "expected_terms": [
+      "LoadSceneAsync",
+      "AsyncOperation"
+    ]
+  }
+]

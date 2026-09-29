@@ -1,0 +1,12 @@
+# Game Source Code RAG Knowledge Base 依赖
+
+# 复用 rag-knowledge-base 的依赖
+sentence-transformers>=2.2.0
+chromadb>=0.4.0
+pydantic>=2.0.0
+httpx>=0.24.0
+pyyaml>=6.0
+tqdm>=4.65.0
+
+# MCP Server 集成（复用 unity-mcp-platform 的依赖）
+# fastmcp  - 已在 unity-mcp-platform 中安装

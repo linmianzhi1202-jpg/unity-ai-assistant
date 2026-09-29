@@ -1,0 +1,14 @@
+{
+  "status": "passed",
+  "checks": [
+    "health",
+    "editor_state",
+    "attribute_discovery",
+    "duplicate_registration",
+    "create",
+    "component_update",
+    "refresh",
+    "compile_errors",
+    "validate"
+  ]
+}

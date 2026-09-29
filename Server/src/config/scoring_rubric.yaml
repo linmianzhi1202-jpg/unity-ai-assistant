@@ -1,0 +1,224 @@
+# ============================================================
+# Knowledge Base Code Scoring — Rule Definitions v2.0
+# ============================================================
+# 每条规则由正则引擎执行，无需 LLM 参与。
+# severity 三级门控：critical（阻断）> warning（扣分）> info（报告）
+# critical 规则任意一条 fail → 代码 blocked，不进入适配流水线。
+
+version: "2.0"
+description: "Structured rules for deterministic scoring & gating. No LLM involved in scoring."
+
+# ---- Rules ----
+rules:
+  # =========================================
+  # CRITICAL — 阻断级（fail = blocked）
+  # =========================================
+
+  - id: "find_in_update"
+    severity: "critical"
+    category: "code_quality"
+    description: "Update/FixedUpdate/LateUpdate 中调用 Find/GetComponent/FindObjectOfType"
+    patterns:
+      - '(?s)void\s+(?:Update|FixedUpdate|LateUpdate)\s*\([^)]*\)\s*\{[^}]*?(?:Find|GetComponent|FindObjectOfType)'
+    logic: "match_any"
+    threshold: 0
+    score_penalty: 0
+
+  - id: "instantiate_in_update"
+    severity: "critical"
+    category: "code_quality"
+    description: "Update/FixedUpdate/LateUpdate 中调用 Instantiate"
+    patterns:
+      - '(?s)void\s+(?:Update|FixedUpdate|LateUpdate)\s*\([^)]*\)\s*\{[^}]*?Instantiate'
+    logic: "match_any"
+    threshold: 0
+    score_penalty: 0
+
+  - id: "no_null_guard_after_find"
+    severity: "critical"
+    category: "code_quality"
+    description: "GetComponent/Find 调用后缺少空引用检查（允许紧邻 3 行内无判空）"
+    patterns:
+      - '(?:GetComponent|Find)\([^)]*\)'
+    logic: "no_null_guard"
+    threshold: 2
+    score_penalty: 0
+
+  - id: "destroy_in_loop"
+    severity: "critical"
+    category: "code_quality"
+    description: "循环体内调用 Destroy/Object.Destroy"
+    patterns:
+      - '(?s)(?:for|foreach|while)\s*\([^)]*\)[^}]*?(?:Destroy\s*\()'
+    logic: "match_any"
+    threshold: 0
+    score_penalty: 0
+
+  # =========================================
+  # WARNING — 扣分级（fail=扣分，不阻断）
+  # =========================================
+
+  - id: "low_comment_ratio"
+    severity: "warning"
+    category: "code_quality"
+    description: "注释率低于 5%"
+    patterns: []
+    logic: "comment_ratio_lt"
+    threshold: 5
+    score_penalty: 1.5
+
+  - id: "magic_number"
+    severity: "warning"
+    category: "code_quality"
+    description: "代码中存在无注释的魔术数字（>3 处）"
+    patterns:
+      - '(?<!/)\b\d{2,}\b'
+    logic: "count_gt"
+    threshold: 3
+    score_penalty: 1.0
+
+  - id: "string_concat_in_loop"
+    severity: "warning"
+    category: "code_quality"
+    description: "循环体内使用字符串拼接（应使用 StringBuilder）"
+    patterns:
+      - '(?s)(?:for|foreach|while)\s*\([^)]*\)[^}]*?(\+\=)'
+    logic: "match_any"
+    threshold: 0
+    score_penalty: 1.5
+
+  - id: "public_field_no_serialize"
+    severity: "warning"
+    category: "code_quality"
+    description: "public 字段未标记 [SerializeField] 或 [HideInInspector]（可能设计不当）"
+    patterns:
+      - 'public\s+\w+\s+\w+\s*;'
+    logic: "count_gt"
+    threshold: 2
+    score_penalty: 0.5
+
+  - id: "non_pascal_case_method"
+    severity: "warning"
+    category: "code_quality"
+    description: "方法名不符合 PascalCase（存在非大写开头的 private/public 方法）"
+    patterns:
+      - '(?:private|public|protected)\s+\w+\s+([a-z]\w*)\s*\('
+    logic: "count_gt"
+    threshold: 1
+    score_penalty: 0.5
+
+  - id: "vector2_inequality"
+    severity: "warning"
+    category: "code_quality"
+    description: "使用 != 比较 Vector2/Vector3（应使用 sqrMagnitude + 容差或 == 仅在精确相等时可接受）"
+    patterns:
+      - '(?:Vector2|Vector3)\s+\w+.*!=\s*'
+    logic: "match_any"
+    threshold: 0
+    score_penalty: 0.5
+
+  - id: "gameobject_compare"
+    severity: "warning"
+    category: "code_quality"
+    description: "使用 == null 比较 GameObject（Unity 重载了 ==，但某些场景不可靠，建议用 is null 或 ReferenceEquals）"
+    patterns:
+      - 'GameObject.*==\s*null'
+    logic: "match_any"
+    threshold: 0
+    score_penalty: 0.5
+
+  # =========================================
+  # INFO — 报告级（不扣分，仅供参考）
+  # =========================================
+
+  - id: "empty_awake_start"
+    severity: "info"
+    category: "code_quality"
+    description: "存在空的 Awake/Start 方法"
+    patterns:
+      - '(?s)void\s+(?:Awake|Start)\s*\([^)]*\)\s*\{\s*\}'
+    logic: "match_any"
+    threshold: 0
+    score_penalty: 0
+
+  - id: "missing_namespace"
+    severity: "info"
+    category: "code_quality"
+    description: "文件未声明命名空间"
+    patterns: []
+    logic: "no_namespace"
+    threshold: 0
+    score_penalty: 0
+
+  - id: "debug_log_in_production"
+    severity: "info"
+    category: "code_quality"
+    description: "代码中存在 Debug.Log 调用（生产发布前应移除）"
+    patterns:
+      - 'Debug\.Log'
+    logic: "match_any"
+    threshold: 0
+    score_penalty: 0
+
+  - id: "too_many_serialized_fields"
+    severity: "info"
+    category: "code_quality"
+    description: "[SerializeField] 字段超过 8 个（可能违反单一职责）"
+    patterns:
+      - '\[SerializeField\]'
+    logic: "count_gt"
+    threshold: 8
+    score_penalty: 0
+
+  - id: "coroutine_no_null_guard"
+    severity: "warning"
+    category: "code_quality"
+    description: "协程方法内未对 gameObject/this 做存活判空防护"
+    patterns:
+      - 'IEnumerator\s+\w+\s*\([^)]*\)[\s\S]{0,300}(?<!gameObject|this)\b'
+    logic: "missing_null_guard_in_coroutine"
+    threshold: 1
+    score_penalty: 1.0
+
+  # =========================================
+  # Architecture Fit（架构匹配 — 供项目对比用）
+  # =========================================
+  # 这些规则需要结合 project_context 才能正确执行，
+  # 由 RulesEngine 在 run_with_context 时动态判定。
+
+  - id: "mismatched_namespace"
+    severity: "warning"
+    category: "architecture_fit"
+    description: "参考代码的命名空间与当前项目不一致"
+    patterns: []
+    logic: "namespace_mismatch"
+    threshold: 0
+    score_penalty: 1.0
+
+  - id: "missing_project_dependencies"
+    severity: "warning"
+    category: "architecture_fit"
+    description: "参考代码依赖的类/组件在当前项目中可能不存在（启发式检查）"
+    patterns: []
+    logic: "dependency_check"
+    threshold: 0
+    score_penalty: 1.0
+
+  - id: "singleton_conflict"
+    severity: "warning"
+    category: "architecture_fit"
+    description: "参考代码使用单例模式但当前项目不采用该模式"
+    patterns:
+      - '(?:Instance|_instance|Singleton)'
+    logic: "match_any"
+    threshold: 0
+    score_penalty: 1.5
+
+# ---- Agent Observer 配置 ----
+# Agent 是后置观察者，不在规则引擎内部运行。
+# 规则跑完后，Agent 看代码+规则结果生成 agent_notes。
+agent:
+  enabled: true          # 设为 false 则完全禁用 Agent 层
+  model: "gemma4:26b"    # 可通过环境变量 UNITY_MCP_CODE_SCORING_MODEL 覆盖
+  timeout_seconds: 15    # 超时静默降级
+  temperature: 0.1       # 低温度保证一致性

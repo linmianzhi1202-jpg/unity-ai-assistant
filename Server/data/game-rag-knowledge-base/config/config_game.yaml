@@ -1,0 +1,61 @@
+# Game Source Code RAG Knowledge Base Configuration
+
+# ============================================================
+# 源码目录配置
+# ============================================================
+source:
+  # 游戏源码根目录（相对路径相对于本目录 game-rag-knowledge-base/）
+  # 把你的 Unity 游戏项目（含 Assets/Scripts）放入 game_source/ 目录
+  root_directory: "game_source"
+  supported_extensions:
+    - ".cs"
+    - ".unity"
+  max_file_size_kb: 10240
+
+# ============================================================
+# 嵌入模型配置
+# ============================================================
+embedding:
+  provider: "local"
+  zhipu:
+    model: "embedding-3"
+    api_key_env: "ZHIPUAI_API_KEY"
+  openai:
+    model: "text-embedding-3-small"
+    api_key_env: "OPENAI_API_KEY"
+  local:
+    model_name: "BAAI/bge-small-zh-v1.5"
+    device: "cpu"
+  batch_size: 100
+
+# ============================================================
+# 向量数据库配置
+# ============================================================
+vector_store:
+  type: "chromadb"
+  persist_directory: "data/chromadb"
+  collection_name: "game_source_code"
+  chroma:
+    distance_function: "cosine"
+
+# ============================================================
+# 检索配置
+# ============================================================
+retrieval:
+  top_k: 5
+  score_threshold: 0.6
+
+# ============================================================
+# 知识图谱配置 (GraphRAG)
+# ============================================================
+graph:
+  file_path: "data/game_code_graph.json"
+  traverse_depth: 1
+  enable_hybrid: true
+
+# ============================================================
+# 日志配置
+# ============================================================
+logging:
+  level: "INFO"
+  file: "logs/game_rag.log"

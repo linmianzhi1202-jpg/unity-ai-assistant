@@ -1,0 +1,28 @@
+{
+  "name": "com.unity-ai-assistant.plugin",
+  "version": "1.0.0",
+  "displayName": "Unity AI 开发助手插件",
+  "description": "Unity MCP editor bridge for verified project selection, scene and component operations, and knowledge-assisted development.",
+  "unity": "2021.3",
+  "documentationUrl": "",
+  "licensesUrl": "",
+  "dependencies": {
+    "com.unity.nuget.newtonsoft-json": "3.0.2",
+    "com.unity.test-framework": "1.3.9"
+  },
+  "keywords": [
+    "unity",
+    "ai",
+    "llm",
+    "mcp",
+    "model-context-protocol",
+    "mcp-server",
+    "mcp-client",
+    "codebuddy",
+    "ai-assistant",
+    "game-development"
+  ],
+  "author": {
+    "name": "Unity AI Assistant Team"
+  }
+}

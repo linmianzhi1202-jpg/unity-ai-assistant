@@ -1,0 +1,190 @@
+---
+name: safe-refactor
+description: 安全重构规则 — 控制变更范围、确保可回滚、强制验证门控
+version: "0.2.0"
+scope: project
+priority: high
+category: safety
+format: RULE.mdc
+migrated_from: safe-refactor.md (Phase 1 → Phase 2)
+triggers:
+  - "重构代码"
+  - "重命名/移动/删除文件或符号"
+  - "修改公共接口/API 签名"
+  - "大规模代码整理/清理"
+  - "依赖升级/迁移"
+references:
+  - source: ref/claw-code-main/rust/crates/runtime/src/permission_enforcer.rs
+    extracted: workspace boundary check（变更必须限定在安全范围内）
+  - source: ref/claw-code-main/rust/crates/runtime/src/recovery_recipes.rs
+    extracted: 7 种 Recovery Recipes（每种失败允许 1 次自动恢复）
+  - source: ref/claw-code-main/PARITY.md
+    extracted: Branch freshness before blame（先检测分支状态再判定回归原因）
+  - source: ref/claude-code-main/src/types/permissions.ts
+    extracted: Ask/DenY 决策模式 + YOLO Classifier 两阶段安全分类
+---
+
+# Safe Refactor Rules
+
+> **参考来源**:
+> - `ref/claw-code-main` → `PermissionEnforcer` 的 **workspace boundary check**：变更必须限定在安全范围内
+> - `ref/claw-code-main` → **Recovery Recipes（7种恢复方案）**：每种失败允许 1 次自动恢复，核心是「先有退路再动手」
+> - `ref/claw-code-main` → **Branch freshness before blame**：先检测分支状态再判定回归原因
+> - `ref/claude-code-main` → Permission 系统 **Ask/Deny 决策模式** + YOLO Classifier 两阶段安全分类
+> - 转化为 CodeBuddy Rule 格式
+>
+> **格式版本**: Phase 2 迁移至 `RULE.mdc` 官方规则文件格式。
+
+## 核心原则
+
+### R1: 变更边界明确（Boundary Explicit）
+- 每次重构必须声明影响范围（文件列表 / 模块 / 公共接口）
+- 跨模块变更需要逐个列出受影响的调用方
+- 禁止在未确认所有调用方的情况下修改公共 API 签名
+
+### R2: 可回滚优先（Rollback First）
+- 重构前必须确认当前代码可通过版本控制还原（git status clean 或已 commit）
+- 大型重构建议使用 feature 分支，禁止直接在 main/master 上操作
+- 如果无法保证原子性回滚（如涉及数据库迁移），必须有手动回滚步骤文档
+
+### R3: 小步提交（Atomic Commits）
+- 每次重构提交应包含**单一语义变更**
+- 提交信息格式：`refactor(scope): description`
+- 禁止将「重构 + 新功能 + 修复 bug」混在一个 commit 中
+
+### R4: 测试门控（Test Gating）
+- 修改已有逻辑前，确认存在对应测试覆盖
+- 无测试的代码首次修改时，**必须先补充测试**记录当前行为
+- 重构后测试必须全部通过才可继续下一步
+
+## 重构分类与管控等级
+
+| 等级 | 变更类型 | 审批要求 | 回滚方式 | 示例 |
+|------|----------|----------|----------|------|
+| **L1 安全** | 内部变量/函数重命名、提取方法、格式化 | 自动（Agent 自行决策） | 单文件 git checkout | `extractMethod`, `renameLocalVar` |
+| **L2 需注意** | 文件移动/重命名、私有接口修改、内部模块重组 | Agent 自行决策 + 列出影响面 | git revert 最近 N 个 commit | `moveFile`, `reorganizeModule` |
+| **L3 危险** | 公共 API 签名变更、删除导出、跨包依赖调整 | 必须列出所有调用方并逐一确认 | feature branch + code review | `changePublicAPI`, `removeExport` |
+| **L4 极危** | 数据库 schema 变更、配置文件格式破坏性变更、协议变更 | 用户显式确认 + 手动审查 | 手动回滚文档 + 备份 | `migrateSchema`, `breakConfigFormat` |
+
+## 前置检查清单
+
+每次执行重构操作前，必须完成以下检查：
+
+```
+□ git status 是否干净？（或当前改动已保存）
+□ 受影响文件列表是否完整？
+□ 是否有对应的测试？
+□ 公共接口变更是否已追踪所有调用方？
+□ 是否有回滚计划？（L3/L4 必须）
+□ 当前分支是否正确？（不在 main 上做 L3+）
+```
+
+## 常见重构操作的安全规程
+
+### OP1: 重命名符号（Rename）
+
+```bash
+# Step 1: 搜索所有引用（全局搜索）
+search_content(pattern="oldName", path="项目根目录")
+
+# Step 2: 分类引用
+#   - 定义处 (1处)
+#   - 同文件引用 (N处)
+#   - 跨文件引用 (M处)
+#   - 测试文件引用 (K处)
+#   - 文档/注释中的字符串匹配 (L处) ← 注意区分！
+
+# Step 3: 执行替换
+replace_in_file(每个包含引用的文件)
+
+# Step 4: 验证
+#   - 编译通过
+#   - 所有测试通过
+#   - 全局搜索确认无残留 oldName（排除注释和历史）
+```
+
+**反模式警告**：
+- ❌ 只改定义不改调用方 → 编译错误 / 运行时 undefined
+- ❌ 不区分同名不同域的符号 → 误伤其他模块
+- ❌ 字符串暴力替换 → 改到注释里的示例代码或日志消息中
+
+### OP2: 移动文件（Move File）
+
+```
+1. 使用 git mv（保留历史）而非 delete+create
+2. 更新所有 import/require 路径
+3. 更新导出索引（index.ts / barrel file）
+4. 检查是否有相对路径引用（如 __dirname、配置文件路径）
+5. 验证构建产物是否正常
+```
+
+### OP3: 提取方法/组件（Extract）
+
+```
+1. 确认提取后的输入输出接口清晰
+2. 保持原有行为完全一致（不引入额外副作用）
+3. 新文件的命名遵循项目约定
+4. 更新原位置的引用为调用新单元
+5. 补充新单元的基本测试
+```
+
+### OP4: 修改公共接口签名（Change Signature）—— L3 危险操作
+
+```
+1. 【必须】搜索项目中所有调用点（含测试、示例、文档）
+2. 在旧签名上添加 @deprecated 标注（保留旧接口作为适配器）
+3. 实现新签名
+4. 旧接口内部委托给新实现
+5. 逐步迁移调用方（不要一次性全改）
+6. 所有迁移完成后，再移除旧接口
+7. 这属于渐进式重构，跨越多个 commit
+```
+
+## 错误恢复策略
+
+> 提炼自 Claw Code Recovery Recipes 的「1次自动恢复原则」
+
+当重构导致问题时，按以下顺序处理：
+
+| 问题类型 | 恢复动作 | 条件 |
+|----------|----------|------|
+| **编译错误** | `git checkout -- <file>` 还原最近修改的文件 | 单文件问题 |
+| **测试失败** | 分析失败用例，定位引入问题的具体 commit，还原该 commit | 可精确定位 |
+| **运行时异常** | `git revert <commit-hash>` 回退整个重构 commit | 无法精确还原 |
+| **构建系统损坏** | `git reflog` 找到上一个可用状态，`git reset --hard` | 极端情况 |
+
+**关键规则**: 恢复后必须先分析根因，记录教训，然后再尝试。
+
+## 输出规范
+
+当此规则被触发时，Agent 应输出：
+
+```markdown
+## 重构安全评估报告
+
+**操作类型**: <OP1-OP4>
+**危险等级**: <L1-L4>
+**影响范围**: <文件数> 个文件, <模块数> 个模块
+
+### 变更清单
+| 文件 | 变更类型 | 风险 |
+|------|----------|------|
+| ... | ... | ... |
+
+### 前置检查结果
+- [x] git status: ...
+- [ ] 测试覆盖: ...
+
+### 回滚方案
+<具体回滚命令或步骤>
+
+### 执行确认
+<等待确认后开始执行（L3+ 需要）>
+```
+
+## 版本历史
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| 0.1.0 | 2026-04-06 | 初始版本（.md 平铺格式） |
+| 0.2.0 | 2026-04-06 | 迁移至 RULE.mdc 子目录格式 |

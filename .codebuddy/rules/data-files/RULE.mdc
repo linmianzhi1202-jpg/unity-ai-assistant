@@ -1,0 +1,53 @@
+---
+name: data-files
+description: 数据文件规则 — 所有数据文件必须 JSON Schema 验证、版本化、向后兼容
+version: 0.2.0
+severity: warning
+enabled: true
+category: engineering
+format: RULE.mdc
+migrated_from: ref/Claude-Code-Game-Studios-main/.claude/rules/data-files.md
+references:
+  - source: 'Claude Code Game Studios original rule: data-files'
+    extracted: 所有数据文件必须 JSON Schema 验证、版本化、向后兼容
+---
+
+# 数据文件规则
+
+## 规则说明
+
+所有数据文件必须 JSON Schema 验证、版本化、向后兼容
+
+## 适用路径
+
+此规则适用于以下路径：
+- `assets/data/**`
+- `Assets/Data/**`
+- `Assets/Resources/Data/**`
+
+## 规则内容
+
+- ✅ 所有 JSON 文件必须是有效 JSON — 损坏的 JSON 会阻塞整个构建管线
+- ✅ 文件命名：仅小写带下划线，遵循 `[系统]_[名称].json` 模式
+- ✅ 每个数据文件必须有一个文档化的 schema（要么是 JSON Schema，要么在对应的设计文档中文档化）
+- ✅ 数值必须包含注释或配套文档，解释数字的含义
+- ✅ 对 JSON 文件中的键使用一致的命名：camelCase
+- ✅ 无孤立的数据条目 — 每个条目必须被代码或其他数据文件引用
+- ✅ 在进行破坏性 schema 变更时版本化数据文件
+- ✅ Unity ScriptableObject 数据资产应与 JSON 配置保持同步，使用 `[CreateAssetMenu]` 标注
+
+## 检查清单
+
+在提交相关代码前，请确认：
+
+- [ ] 所有 JSON 文件必须是有效 JSON — 损坏的 JSON 会阻塞整个构建管线
+- [ ] 文件命名：仅小写带下划线，遵循 `[系统]_[名称].json` 模式
+- [ ] 每个数据文件必须有一个文档化的 schema（要么是 JSON Schema，要么在对应的设计文档中文档化）
+- [ ] 数值必须包含注释或配套文档，解释数字的含义
+- [ ] 对 JSON 文件中的键使用一致的命名：camelCase
+## 版本历史#
+
+| 版本 | 日期 | 变更 |
+|------|------|----------|
+| **v0.2.0** | 2026-04-27 | 升级版本号，翻译英文内容，完善检查清单 |
+| v0.1.0 | 2026-04-26 | 从 Claude Code Game Studios 迁移并中文化 |

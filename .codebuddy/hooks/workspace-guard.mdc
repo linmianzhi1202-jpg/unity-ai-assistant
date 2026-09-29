@@ -1,0 +1,126 @@
+---
+name: workspace-guard
+description: "工作区边界守卫 — 在写操作执行前校验目标路径是否在 workspace 边界内，防止越权修改 ref 目录、系统路径或外部文件"
+version: "0.2.0"
+event: PreToolUse
+type: prompt
+matcher: "Write|Edit|replace_in_file|write_to_file|delete_file"
+timeout: 10
+enabled: true
+category: security
+references:
+  - source: "ref/Claude-Code-Game-Studios-main/.claude/hooks/validate-assets.sh"
+    extracted: "Asset naming convention and JSON structure validation"
+  - source: "Claude Code hooks.ts"
+    extracted: "PreToolUse event definition + permissionDecision (allow/deny/ask) output format"
+---
+
+# H1: Workspace Guard — 工作区边界守卫
+
+## 用途
+
+在每次文件写入/编辑/删除操作前，自动检查目标路径是否位于合法的工作区范围内。
+
+**核心防护目标**：
+1. 阻止对 `ref/` 参考资料目录的任何修改（只读保护）
+2. 阻止对系统路径（`C:\Windows\`, `/etc/`, `~/.config/` 等）的意外写入
+3. 阻止对工作区外项目文件的跨目录污染
+
+## 匹配规则
+
+```
+matcher: "Write|Edit|replace_in_file|write_to_file|delete_file"
+```
+
+匹配所有可能修改文件系统的工具调用。
+
+## 校验逻辑
+
+### Step 1: 提取目标路径
+
+从 `$TOOL_INPUT` 中提取 `filePath` 或 `file_path` 字段。
+
+### Step 2: 路径规范化
+
+将路径转换为绝对路径，解析 `..` 和符号链接。
+
+### Step 3: 白名单检查
+
+以下路径模式**允许通过**：
+- ✅ 以 `$CODEBUDDY_PROJECT_DIR` 开头（即项目目录内）
+- ✅ 以系统临时目录开头的中间产物（如构建缓存）
+
+### Step 4: 黑名单拦截
+
+以下路径模式**必须拒绝**：
+- ❌ 包含 `/ref/` 或 `\ref\` （参考资料目录，只读）
+- ❌ 包含 `C:\Windows`、`/etc/`、`/usr/` 等系统路径
+- ❌ 包含 `~/.` 用户配置路径（除非明确授权）
+- ❌ 包含 `..` 路径穿越（已规范化后仍逃逸出 project dir）
+
+### Step 5: 决策输出
+
+```json
+{
+  "hookSpecificOutput": {
+    "permissionDecision": "allow | deny | ask",
+    "reason": "<决策原因说明>"
+  },
+  "systemMessage": "<可选：向用户展示的安全提示>"
+}
+```
+
+## 决策矩阵
+
+| 场景 | 决策 | 原因 |
+|------|------|------|
+| 路径在项目目录内 | **allow** | 正常工作区操作 |
+| 路径指向 `ref/` 目录 | **deny** | 参考资料只读，不可修改 |
+| 路径指向系统目录 | **deny** | 系统路径不受保护且危险 |
+| 路径在工作区外但用户显式确认过 | **ask** | 需要用户二次确认 |
+| 无法确定路径安全性 | **ask** | 安全优先，请求人工判断 |
+
+## Prompt 模板
+
+当此 Hook 被 CodeBuddy 触发时，实际执行的 prompt：
+
+```
+你是一个工作区安全守卫。当前有文件操作请求：
+
+工具名: $TOOL_NAME
+目标文件: $TOOL_INPUT.file_path
+项目根目录: $CODEBUDDY_PROJECT_DIR
+
+请执行以下检查：
+1. 将目标文件路径规范化为绝对路径
+2. 判断该路径是否以项目根目录开头
+3. 判断该路径是否包含 /ref/ 子串
+4. 判断该路径是否涉及系统敏感目录
+
+输出 JSON 格式决策：
+{
+  "permissionDecision": "allow|deny|ask",
+  "reason": "一句话说明理由"
+}
+```
+
+## 集成到 CodeBuddy 增强层
+
+此 Hook 与以下增强功能集成：
+
+- `policy-executable` Rule 的 L1-L4 危险等级联动（L4 操作强制 ask）
+- `security-gate` Hook 的敏感信息检测（同时检查凭证泄露）
+- `change-log` Hook 的操作日志记录（记录所有文件操作）
+
+## 版本历史
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| 0.2.0 | 2026-04-26 | 从 Claude Code Hooks 迁移并中文化 |
+| 0.1.0 | 2026-04-06 | Phase 2 初始实现（CodeBuddy 原有） |
+
+## 后续规划（Phase 3）
+
+- [ ] 支持自定义白名单路径配置（通过 settings.json）
+- [ ] 支持路径正则规则扩展
+- [ ] 与 safe-refactor R3 的 L1-L4 危险等级联动（L4 操作强制 ask）

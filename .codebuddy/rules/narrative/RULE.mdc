@@ -1,0 +1,54 @@
+---
+name: narrative
+description: '叙事内容规则 — 确保故事一致性、角色声音匹配、世界规则文档化'
+version: 0.3.0
+severity: warning
+enabled: true
+category: engineering
+format: RULE.mdc
+migrated_from: ref/Claude-Code-Game-Studios-main/.claude/rules/narrative.md
+references:
+  - source: 'Claude Code Game Studios original rule: narrative'
+    extracted: '故事一致性、角色声音匹配、世界规则文档化'
+---
+
+# 叙事内容规则
+
+## 规则说明
+
+确保故事一致性、角色声音匹配、世界规则文档化
+
+## 适用路径
+
+此规则适用于以下路径：
+- `design/narrative/**`
+- `Assets/Narrative/**`
+- `Assets/Dialogue/**`
+
+## 规则内容
+
+- ✅ 所有新传说必须交叉引用现有传说以检查矛盾
+- ✅ 每个传说条目必须指定正典等级：Established / Provisional / Under Review
+- ✅ 角色对话必须匹配为该角色定义的语音配置文件
+- ✅ 世界规则（什么是可能的/不可能的）必须明确文档化且一致
+- ✅ 谜团必须有文档化的"真实答案"，即使玩家从不学习它们
+- ✅ 派系动机、关系和权力结构必须在内部合乎逻辑
+- ✅ 所有叙事文本必须为本地化做好准备：无不通翻译成语，变量的命名占位符
+- ✅ 每行对话不应超过 120 个字符，以适应对话盒约束
+
+## 检查清单
+
+在提交相关代码前，请确认：
+
+- [ ] 所有新传说必须交叉引用现有传说以检查矛盾
+- [ ] 每个传说条目必须指定正典等级：Established / Provisional / Under Review
+- [ ] 角色对话必须匹配为该角色定义的语音配置文件
+- [ ] 世界规则（什么是可能的/不可能的）必须明确文档化且一致
+- [ ] 谜团必须有文档化的"真实答案"，即使玩家从不学习它们
+
+## 版本历史#
+
+| 版本 | 日期 | 变更 |
+|------|------|----------|
+| **v0.2.0** | 2026-04-27 | 升级版本号，翻译英文内容，完善检查清单 |
+| v0.1.0 | 2026-04-26 | 从 Claude Code Game Studios 迁移并中文化 |

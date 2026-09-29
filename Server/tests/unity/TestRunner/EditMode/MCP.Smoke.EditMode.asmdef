@@ -1,0 +1,11 @@
+{
+  "name": "MCP.Smoke.EditMode",
+  "references": [],
+  "optionalUnityReferences": [
+    "TestAssemblies"
+  ],
+  "autoReferenced": false,
+  "includePlatforms": [
+    "Editor"
+  ]
+}

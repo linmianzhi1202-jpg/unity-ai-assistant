@@ -1,0 +1,164 @@
+---
+name: shader-code
+description: 着色器代码规则 — 所有着色器代码必须高性能、可移植、平台兼容
+version: 0.3.0
+severity: warning
+enabled: true
+category: engineering
+format: RULE.mdc
+migrated_from: ref/Claude-Code-Game-Studios-main/.claude/rules/shader-code.md
+references:
+  - source: 'Claude Code Game Studios original rule: shader-code'
+    extracted: 所有着色器代码必须高性能、可移植、平台兼容
+  - source: "CCGS docs/engine-reference/unity/modules/rendering.md"
+    extracted: "URP Lit shader template、RenderGraph API、SRP Batcher、GPU Instancing"
+  - source: "CCGS docs/engine-reference/unity/current-best-practices.md"
+    extracted: "RenderGraph vs CommandBuffer、GPU Resident Drawer、Shader Graph production-ready"
+---
+
+# 着色器代码规则
+
+## 规则说明
+
+所有着色器代码必须高性能、可移植、平台兼容
+
+## 适用路径
+
+此规则适用于以下路径：
+- `assets/shaders/**`
+- `Assets/Shaders/**`
+
+## 规则内容
+
+- ✅ 文件命名：`[类型]_[类别]_[名称].[扩展名]`
+  - `Lit_Env_Water.shader` (Unity HLSL)
+  - `SG_Env_Water` (Unity Shader Graph)
+  - `Post_Effect_Bloom.shader` (后处理)
+- ✅ 使用描述性名称，表明材质用途
+- ✅ 前缀带有着色器类型：`Lit_`、`Unlit_`、`Post_`、`Particle_`
+- ✅ 所有 Properties 必须具有描述性名称和适当的 `[Header]` 分组
+- ✅ 注释非显而易见的计算（尤其是数学密集型部分）
+- ✅ 无魔术数字 — 使用命名常量或文档化的 uniform 值
+- ✅ 在每个着色器文件顶部包含作者身份和用途注释
+- ✅ 文档化每个着色器的目标平台和复杂度预算
+- ✅ 使用适当的精度：在不需要全精度的移动设备上使用 `half`/`min16float`
+- ✅ 最小化片段着色器中的纹理采样
+- ✅ 避免在片段着色器中使用动态分支 — 使用 `step()`, `lerp()`, `smoothstep()`
+- ✅ 循环中无纹理读取
+- ✅ 模糊效果使用两遍方法（先水平后垂直）
+- ✅ 在最低规格目标硬件上测试着色器
+- ✅ 为较低质量层级提供回退/简化版本
+- ✅ 文档化着色器目标哪个渲染管线（URP/HDRP/Mobile）
+- ✅ 不要在同一目录中混合来自不同渲染管线的着色器
+- ✅ 最小化着色器变体 — 每个变体都是一个单独的编译着色器
+- ✅ 尽可能文档化所有关键字/变体及其用途
+- ✅ 监控每个着色器的变体计数
+
+## 示例
+
+### URP Lit Shader（Unity 6 推荐格式）
+
+✅ **正确**（URP HLSL 着色器）：
+```hlsl
+// 着色器: Lit_Env_Water
+// 用途: 环境水面效果（URP Forward）
+// 目标: 移动+PC / 变体数: 2
+
+Shader "Custom/Lit_Env_Water" {
+    Properties {
+        [Header(Water Settings)]
+        _BaseColor ("Base Color", Color) = (0.1, 0.3, 0.5, 1.0)
+        _DepthColor ("Depth Color", Color) = (0.02, 0.1, 0.2, 1.0)
+        _DepthFactor ("Depth Factor", Range(0, 5)) = 2.0
+
+        [Header(Wave Settings)]
+        _WaveSpeed ("Wave Speed", Range(0, 2)) = 0.5
+        _WaveStrength ("Wave Strength", Range(0, 0.5)) = 0.1
+    }
+
+    SubShader {
+        Tags {
+            "RenderType" = "Transparent"
+            "RenderPipeline" = "UniversalPipeline"
+            "Queue" = "Transparent"
+        }
+
+        Pass {
+            Name "ForwardLit"
+            Tags { "LightMode" = "UniversalForward" }
+
+            HLSLPROGRAM
+            #pragma vertex vert
+            #pragma fragment frag
+            // 最小化变体 — 仅启用必要关键字
+            #pragma multi_compile _ _MAIN_LIGHT_SHADOWS
+            #include "Packages/com.unity.render-pipelines.universal/ShaderLibrary/Core.hlsl"
+
+            // 使用 half 精度优化移动端
+            half4 frag(Varyings input) : SV_Target {
+                half depth = SampleSceneDepth(input.uv);
+                half3 color = lerp(_BaseColor.rgb, _DepthColor.rgb, depth * _DepthFactor);
+                return half4(color, 0.8);
+            }
+            ENDHLSL
+        }
+    }
+    // 低端设备回退
+    Fallback "Universal Render Pipeline/Lit"
+}
+```
+
+### RenderGraph 自定义渲染通道（Unity 6+）
+
+✅ **正确**（RenderGraph API）：
+```csharp
+public override void RecordRenderGraph(RenderGraph renderGraph, ContextContainer frameData) {
+    using var builder = renderGraph.AddRasterRenderPass<PassData>("CustomPass", out var passData);
+    builder.SetRenderFunc((PassData data, RasterGraphContext ctx) => {
+        // 执行渲染命令
+    });
+}
+```
+
+❌ **错误**（旧 CommandBuffer 模式 — 已弃用）：
+```csharp
+// ❌ Unity 6 中已弃用
+public override void Execute(ScriptableRenderContext context, ref RenderingData data) {
+    CommandBuffer cmd = CommandBufferPool.Get("CustomPass");
+    // ... 旧模式
+    context.ExecuteCommandBuffer(cmd);
+    CommandBufferPool.Release(cmd);
+}
+```
+
+### GPU Instancing（批量渲染）
+
+✅ **正确**：
+```csharp
+Graphics.RenderMeshInstanced(
+    new RenderParams(material),
+    mesh,
+    0,
+    matrices  // NativeArray<Matrix4x4>
+);
+```
+
+## 检查清单
+
+在提交相关代码前，请确认：
+
+- [ ] 着色器文件命名遵循 `[类型]_[类别]_[名称]` 规范
+- [ ] 使用 `[Header]` 分组 Properties
+- [ ] 目标渲染管线已文档化（URP/HDRP）
+- [ ] 移动端使用 `half` 精度
+- [ ] 无动态分支（使用 `step()`/`lerp()`/`smoothstep()`）
+- [ ] 变体数量已监控并最小化
+- [ ] 低端设备有 Fallback 着色器
+
+## 版本历史
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| **v0.3.0** | 2026-04-29 | 知识灌入：从 Godot shader 规范扩展为 Unity URP/HLSL 规范，注入 RenderGraph/GPU Instancing 正反例 |
+| v0.2.0 | 2026-04-27 | 升级版本号，翻译英文内容，完善检查清单 |
+| v0.1.0 | 2026-04-26 | 从 Claude Code Game Studios 迁移并中文化 |

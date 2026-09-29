@@ -1,0 +1,338 @@
+{
+  "version": "1.0.0",
+  "description": "Shared truth source for Python MCP Tool <-> Unity ToolDispatcher Action mappings. Both sides MUST stay in sync with this file.",
+  "generated": "2026-05-01",
+  "mappings": {
+    "get_unity_logs": {
+      "unity_tool": "manage_editor",
+      "unity_action": "get_unity_logs"
+    },
+    "get_unity_editor_state": {
+      "unity_tool": "manage_editor",
+      "unity_action": "get_editor_state"
+    },
+    "execute_menu_item": {
+      "unity_tool": "manage_editor",
+      "unity_action": "execute_menu_item",
+      "description": "执行 Unity 编辑器菜单项"
+    },
+    "check_compile_errors": {
+      "unity_tool": "manage_editor",
+      "unity_action": "check_compile_errors"
+    },
+    "refresh_unity": {
+      "unity_tool": "manage_editor",
+      "unity_action": "refresh",
+      "description": "刷新 Unity Asset Database"
+    },
+    "play_game": {
+      "unity_tool": "manage_editor",
+      "unity_action": "play"
+    },
+    "stop_game": {
+      "unity_tool": "manage_editor",
+      "unity_action": "stop"
+    },
+    "get_game_object_info": {
+      "unity_tool": "manage_editor",
+      "unity_action": "get_game_object_info"
+    },
+    "list_game_objects_in_hierarchy": {
+      "unity_tool": "manage_scene",
+      "unity_action": "get_hierarchy"
+    },
+    "get_registered_actions": {
+      "unity_tool": "manage_editor",
+      "unity_action": "get_registered_actions",
+      "description": "获取 Unity 端所有已注册 handler 名称（启动验证用）"
+    },
+    "save_scene": {
+      "unity_tool": "manage_scene",
+      "unity_action": "save"
+    },
+    "open_scene": {
+      "unity_tool": "manage_scene",
+      "unity_action": "open"
+    },
+    "create_scene": {
+      "unity_tool": "manage_scene",
+      "unity_action": "create",
+      "description": "创建新场景"
+    },
+    "get_hierarchy": {
+      "unity_tool": "manage_scene",
+      "unity_action": "get_hierarchy",
+      "description": "获取场景层级结构"
+    },
+    "get_active_scene": {
+      "unity_tool": "manage_scene",
+      "unity_action": "get_active",
+      "description": "获取当前活跃场景信息"
+    },
+    "create_game_object": {
+      "unity_tool": "manage_gameobject",
+      "unity_action": "create"
+    },
+    "delete_game_object": {
+      "unity_tool": "manage_gameobject",
+      "unity_action": "delete"
+    },
+    "duplicate_game_object": {
+      "unity_tool": "manage_gameobject",
+      "unity_action": "create"
+    },
+    "rename_game_object": {
+      "unity_tool": "manage_gameobject",
+      "unity_action": "rename"
+    },
+    "parent_game_object": {
+      "unity_tool": "manage_gameobject",
+      "unity_action": "parent"
+    },
+    "set_sibling_index": {
+      "unity_tool": "manage_gameobject",
+      "unity_action": "set_sibling_index"
+    },
+    "add_component": {
+      "unity_tool": "manage_components",
+      "unity_action": "add"
+    },
+    "remove_component": {
+      "unity_tool": "manage_components",
+      "unity_action": "remove"
+    },
+    "set_transform": {
+      "unity_tool": "manage_transform",
+      "unity_action": null
+    },
+    "get_transform": {
+      "unity_tool": "manage_transform",
+      "unity_action": "get",
+      "description": "获取 Transform 信息"
+    },
+    "set_tag": {
+      "unity_tool": "set_tag",
+      "unity_action": null
+    },
+    "set_layer": {
+      "unity_tool": "set_layer",
+      "unity_action": null
+    },
+    "set_property": {
+      "unity_tool": "manage_components",
+      "unity_action": "set_property",
+      "description": "设置组件属性值"
+    },
+    "repair_scene_references": {
+      "unity_tool": "manage_components",
+      "unity_action": "audit_references"
+    },
+    "execute_script": {
+      "unity_tool": "execute_script",
+      "unity_action": "execute",
+      "description": "在 Unity Editor 中执行 C# 脚本"
+    },
+    "validate_script": {
+      "unity_tool": "validate_script",
+      "unity_action": "validate",
+      "description": "验证脚本语法"
+    },
+    "manage_script": {
+      "unity_tool": "manage_script",
+      "unity_action": "manage",
+      "description": "管理脚本资源"
+    },
+    "create_material": {
+      "unity_tool": "manage_material",
+      "unity_action": "create"
+    },
+    "assign_material": {
+      "unity_tool": "manage_material",
+      "unity_action": "assign"
+    },
+    "assign_material_to_fbx": {
+      "unity_tool": "manage_material",
+      "unity_action": "assign"
+    },
+    "assign_shader_to_material": {
+      "unity_tool": "manage_material",
+      "unity_action": "set_property"
+    },
+    "manage_shader": {
+      "unity_tool": "manage_shader",
+      "unity_action": null
+    },
+    "create_prefab": {
+      "unity_tool": "manage_prefabs",
+      "unity_action": "create_prefab"
+    },
+    "create_prefab_variant": {
+      "unity_tool": "manage_prefabs",
+      "unity_action": "create_prefab_variant"
+    },
+    "add_nested_object_to_prefab": {
+      "unity_tool": "manage_prefabs",
+      "unity_action": "add_nested_object_to_prefab"
+    },
+    "create_scriptable_object": {
+      "unity_tool": "create_scriptable_object",
+      "unity_action": "create_with_properties"
+    },
+    "manage_scriptable_object": {
+      "unity_tool": "manage_scriptableObject",
+      "unity_action": "manage",
+      "description": "管理 ScriptableObject"
+    },
+    "duplicate_asset": {
+      "unity_tool": "manage_asset",
+      "unity_action": "duplicate_asset"
+    },
+    "rename_asset": {
+      "unity_tool": "manage_asset",
+      "unity_action": "rename_asset"
+    },
+    "place_asset_in_scene": {
+      "unity_tool": "manage_gameobject",
+      "unity_action": "create"
+    },
+    "manage_camera": {
+      "unity_tool": "manage_camera",
+      "unity_action": null
+    },
+    "manage_texture": {
+      "unity_tool": "manage_texture",
+      "unity_action": null
+    },
+    "manage_vfx": {
+      "unity_tool": "manage_vfx",
+      "unity_action": null
+    },
+    "batch_execute": {
+      "unity_tool": "batch_execute",
+      "unity_action": null
+    },
+    "create_animation_clip": {
+      "unity_tool": "manage_animation",
+      "unity_action": "create_animation_clip"
+    },
+    "get_animation_clip_data": {
+      "unity_tool": "manage_animation",
+      "unity_action": "get_animation_clip_data"
+    },
+    "set_animation_curves": {
+      "unity_tool": "manage_animation",
+      "unity_action": "set_animation_curves"
+    },
+    "set_sprite_animation_curve": {
+      "unity_tool": "manage_animation",
+      "unity_action": "set_sprite_animation_curve"
+    },
+    "set_animation_clip_settings": {
+      "unity_tool": "manage_animation",
+      "unity_action": "set_animation_clip_settings"
+    },
+    "create_animator_controller": {
+      "unity_tool": "manage_animation",
+      "unity_action": "create_animator_controller"
+    },
+    "get_animator_controller_data": {
+      "unity_tool": "manage_animation",
+      "unity_action": "get_animator_controller_data"
+    },
+    "modify_animator_controller": {
+      "unity_tool": "manage_animation",
+      "unity_action": null
+    },
+    "create_blend_tree_state": {
+      "unity_tool": "manage_animation",
+      "unity_action": "create_blend_tree_state"
+    },
+    "get_blend_tree_state_data": {
+      "unity_tool": "manage_animation",
+      "unity_action": "get_blend_tree_state_data"
+    },
+    "list_model_animation_clips": {
+      "unity_tool": "manage_animation",
+      "unity_action": "list_model_animation_clips"
+    },
+    "create_ui_element": {
+      "unity_tool": "manage_ui",
+      "unity_action": "create_ui_element"
+    },
+    "set_ui_text": {
+      "unity_tool": "manage_ui",
+      "unity_action": "set_ui_text"
+    },
+    "set_ui_layout": {
+      "unity_tool": "manage_ui",
+      "unity_action": "set_ui_layout"
+    },
+    "set_rect_transform": {
+      "unity_tool": "manage_ui",
+      "unity_action": "set_rect_transform"
+    },
+    "add_persistent_listener": {
+      "unity_tool": "manage_ui",
+      "unity_action": "add_persistent_listener"
+    },
+    "remove_persistent_listener": {
+      "unity_tool": "manage_ui",
+      "unity_action": "remove_persistent_listener"
+    },
+    "preview_asset_scene_plan": {
+      "unity_tool": "manage_gameobject",
+      "unity_action": "analyze_scene_placement_context"
+    },
+    "preview_asset_library_export": {
+      "unity_tool": "manage_asset",
+      "unity_action": "analyze_library_export"
+    },
+    "list_all_prefabs_with_bounding_boxes": {
+      "unity_tool": "manage_asset",
+      "unity_action": "list_all_prefabs_with_bounding_boxes"
+    },
+    "attach_mbehaviour": {
+      "unity_tool": "attach_mbehaviour",
+      "unity_action": "attach"
+    },
+    "set_serialized_reference": {
+      "unity_tool": "set_serialized_reference",
+      "unity_action": "set_reference"
+    },
+    "create_terrain": {
+      "unity_tool": "manage_scene",
+      "unity_action": "create_terrain"
+    },
+    "create_panel_settings_asset": {
+      "unity_tool": "manage_scene",
+      "unity_action": "create_panel_settings"
+    },
+    "capture_scene_object": {
+      "unity_tool": "manage_editor",
+      "unity_action": "capture_screenshot"
+    },
+    "capture_ui_canvas": {
+      "unity_tool": "manage_editor",
+      "unity_action": "capture_screenshot"
+    },
+    "run_tests": {
+      "unity_tool": "run_tests",
+      "unity_action": "start"
+    }
+  },
+  "extension_notes": {
+    "how_to_add_new_tool": [
+      "1. Implement and register the Unity handler/action before exposing a tool",
+      "2. Add the MCP tool name and handler/action mapping under mappings",
+      "3. Keep parameter conversion in the Python tool and call ToolRouter.send_tool(mcp_tool_name, extra_args)",
+      "4. Assign exactly one group:* tag; do not maintain a separate group map",
+      "5. Run startup_validator and the interface compatibility tests"
+    ],
+    "special_routing": {
+      "manage_editor": "Single handler for many actions (play/stop/pause/refresh/check_compile_errors/get_unity_logs/get_editor_state/execute_menu_item/get_registered_actions/capture_screenshot)",
+      "manage_scene": "Scene operations (save/open/create/get_hierarchy/get_active)",
+      "manage_gameobject": "GameObject lifecycle (create/delete/duplicate/rename/parent/set_sibling_index)",
+      "Tier 2 execute_script": "Always use send_to_unity('manage_editor', {action: 'check_compile_errors'/'execute_menu_item'/'get_unity_logs'}) for compile+execute+log pipeline"
+    }
+  }
+}

@@ -1,0 +1,48 @@
+{
+  "mcpServers": {
+    "unity-ai-assistant": {
+      "command": "{{PRODUCT_ROOT}}.venv/Scripts/python.exe",
+      "args": [
+        "{{PRODUCT_ROOT}}server_launcher.py"
+      ],
+      "env": {
+        "PYTHONIOENCODING": "utf-8",
+        "PYTHONUTF8": "1",
+        "UNITY_MCP_TRANSPORT": "stdio",
+        "UNITY_MCP_CODE_ADAPT_MODEL": "qwen2.5-coder:7b",
+        "OLLAMA_HOST": "http://localhost:11434",
+        "UNITY_MCP_ENABLED_GROUPS": "all"
+      },
+      "alwaysAllow": [
+        "knowledge_search",
+        "knowledge_graph_search",
+        "knowledge_unified_search",
+        "knowledge_modules",
+        "knowledge_index",
+        "search_game_code",
+        "search_game_code_graph",
+        "game_code_stats",
+        "adapt_game_code",
+        "select_game_target_script",
+        "start_game_dev_agent",
+        "start_adapt_game_code",
+        "score_game_code",
+        "score_game_code_references",
+        "distill_game_code_patterns",
+        "audit_game_code_knowledge_base",
+        "repair_scene_references",
+        "asset_library_index",
+        "search_asset_library",
+        "import_asset_from_library",
+        "place_asset_from_library",
+        "preview_asset_library_export",
+        "apply_asset_library_export",
+        "get_task_status",
+        "cancel_task",
+        "get_adapt_task_status",
+        "apply_adapt_task",
+        "cancel_adapt_task"
+      ]
+    }
+  }
+}

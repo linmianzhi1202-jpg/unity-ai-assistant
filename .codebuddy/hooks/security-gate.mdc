@@ -1,0 +1,212 @@
+---
+name: security-gate
+description: "安全门控 — 在工具执行前检测敏感信息泄露、危险命令执行、硬编码凭证等安全风险"
+version: "0.2.0"
+event: PreToolUse
+type: prompt
+matcher: "Write|Edit|replace_in_file|write_to_file|delete_file|execute_command"
+timeout: 10
+enabled: true
+category: security
+references:
+  - source: "ref/Claude-Code-Game-Studios-main/.claude/hooks/validate-commit.sh"
+    extracted: "Security best practices, credential scanning"
+  - source: "Claude Code hooks.ts"
+    extracted: "PreToolUse event definition + security checks"
+---
+
+# H4: Security Gate — 安全门控
+
+## 用途
+
+在每次敏感工具执行前，自动检测安全风险。
+
+**核心防护目标**：
+1. 阻止敏感信息泄露（API Key、密码、Token）
+2. 阻止危险命令执行（rm -rf、git push --force 等）
+3. 阻止硬编码凭证到配置文件中
+4. 检测不安全的代码模式
+
+## 匹配规则
+
+```
+matcher: "Write|Edit|replace_in_file|write_to_file|delete_file|execute_command"
+```
+
+匹配所有文件写入和危险命令执行操作。
+
+## 安全检测清单
+
+### S1: 敏感信息检测#
+
+当写入文件时，检查是否包含敏感信息：
+
+**检测模式**：
+- API Key：`api_key`, `apikey`, `API_KEY`, `secret`, `SECRET`
+- 密码：`password`, `passwd`, `pwd`, `PASSWD`
+- Token：`token`, `TOKEN`, `access_token`, `AUTH_TOKEN`
+- 私钥：`private_key`, `PRIVATE KEY`, `BEGIN RSA PRIVATE`
+- 连接字符串：`connection_string`, `CONNECTION_STRING`
+
+**验证方法**：
+```
+# 伪代码
+sensitive_patterns = ['api_key', 'secret', 'password', 'token', 'PRIVATE KEY']
+for pattern in sensitive_patterns:
+    if grep -i "$pattern" "$file_path":
+        if not in_test_file("$file_path"):
+            WARNINGS += f"SECURITY: $file_path contains potential sensitive info: $pattern"
+```
+
+### S2: 危险命令检测#
+
+当执行命令时，检查是否包含危险操作：
+
+**危险命令列表**：
+- ❌ `rm -rf /`（强制删除根目录）
+- ❌ `rm -rf *`（强制删除所有文件）
+- ❌ `git push --force`（强制推送，可能覆盖历史）
+- ❌ `git push -f`（同上）
+- ❌ `git reset --hard`（强制重置，丢失本地修改）
+- ❌ `git clean -f`（强制删除未跟踪文件）
+- ❌ `sudo` 开头（需要管理员权限的操作）
+- ❌ `chmod 777`（设置所有权限）
+- ❌ `cat *.env`（读取环境变量文件）
+- ❌ `type *.env`（同上）
+
+**验证方法**：
+```
+# 伪代码
+dangerous_patterns = ['rm -rf', 'git push --force', 'git reset --hard', 'sudo', 'chmod 777']
+for pattern in dangerous_patterns:
+    if "$command" contains "$pattern":
+        ERRORS += f"SECURITY: Dangerous command detected: $pattern"
+        exit 2  # 阻塞操作
+```
+
+### S3: 硬编码凭证检测#
+
+当写入配置文件时，检查是否硬编码凭证：
+
+**检测模式**：
+- `.env` 文件中的键值对
+- `settings.json` 中的 API 密钥
+- `config.json` 中的密码字段
+
+**正确示例**：
+```json
+// settings.json（正确）
+{
+  "api_key": "$API_KEY",  // 从环境变量读取
+  "db_password": "$DB_PASSWORD"  // 从环境变量读取
+}
+```
+
+**错误示例**：
+```json
+// settings.json（错误）
+{
+  "api_key": "sk-1234567890abcdef",  // 违规：硬编码 API Key
+  "db_password": "mysecretpassword"  // 违规：硬编码密码
+}
+```
+
+### S4: 不安全代码模式检测#
+
+当写入代码文件时，检查是否包含不安全模式：
+
+**检测模式**：
+- `eval()`（执行任意代码）
+- `exec()`（执行系统命令）
+- `system()`（执行系统命令）
+- `popen()`（执行系统命令）
+- SQL 注入风险（字符串拼接 SQL）
+
+**正确示例**（Python）：
+```python
+# 安全：使用参数化查询
+cursor.execute("SELECT * FROM users WHERE id = %s", (user_id,))
+```
+
+**错误示例**（Python）：
+```python
+# 不安全：字符串拼接 SQL（SQL 注入风险）
+cursor.execute(f"SELECT * FROM users WHERE id = {user_id}")
+```
+
+## 输出格式#
+
+```json
+{
+  "hookSpecificOutput": {
+    "securityPassed": true | false,
+    "warnings": [
+      "<警告消息1>",
+      "<警告消息2>"
+    ],
+    "errors": [
+      "<错误讯息1>",
+      "<错误讯息2>"
+    ],
+    "riskLevel": "low | medium | high | critical"
+  },
+  "systemMessage": "<可选：向用户展示的安全警告>"
+}
+```
+
+## 决策矩阵#
+
+| 风险等级 | 决策 | 原因 |
+|------|------|------|
+| **Low** | **allow** | 信息性警告，不阻塞操作 |
+| **Medium** | **ask** | 需要用户确认风险 |
+| **High** | **deny** | 高风险操作，必须阻止 |
+| **Critical** | **deny** | 严重安全漏洞，立即阻止 |
+
+## Prompt 模板#
+
+当此 Hook 被 CodeBuddy 触发时，实际执行的 prompt：
+
+```
+你是一个安全门控。当前有工具执行请求：
+
+工具名: $TOOL_NAME$
+命令/文件路径: $TOOL_INPUT$
+
+项目根目录: $CODEBUDDY_PROJECT_DIR$
+
+请执行以下安全检查：
+1. 如果是文件写入，检查是否包含敏感信息（API Key、密码、Token）
+2. 如果是命令执行，检查是否包含危险操作（rm -rf、git push --force 等）
+3. 如果是配置文件，检查是否硬编码凭证
+4. 如果是代码文件，检查是否包含不安全模式（eval、exec、SQL 注入）
+
+输出 JSON 格式结果：
+{
+  "securityPassed": true | false,
+  "warnings": ["<警告消息>"],
+  "errors": ["<错误讯息>"],
+  "riskLevel": "low | medium | high | critical"
+}
+```
+
+## 集成到 CodeBuddy 增强层#
+
+此 Hook 与以下增强功能集成：
+
+- `engineering-baseline` Rule 的禁止模式检查（unsafe code、unwrap）
+- `safe-refactor` Rule 的重构安全检查
+- `policy-executable` Rule 的 P1-P7 策略检查
+
+## 版本历史#
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| 0.2.0 | 2026-04-26 | 从 Claude Code Hooks 迁移并中文化 |
+| 0.1.0 | 2026-04-06 | Phase 2 初始实现（CodeBuddy 原有） |
+
+## 后续规划（Phase 3）#
+
+- [ ] 支持自定义敏感信息模式配置
+- [ ] 支持正则表达式规则扩展
+- [ ] 与 `dependency-auditor` Skill 联动（检查依赖安全性）

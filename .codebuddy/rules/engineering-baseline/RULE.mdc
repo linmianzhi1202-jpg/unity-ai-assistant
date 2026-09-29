@@ -1,0 +1,164 @@
+---
+name: engineering-baseline
+description: 工程基线规则 — 定义代码风格、提交规范、命名约定和文件组织的最低标准
+version: 0.2.0
+severity: warning
+enabled: true
+category: engineering
+format: RULE.mdc
+migrated_from: engineering-baseline.md (Phase 1 → Phase 2)
+references:
+  - source: ref/claw-code-main/rust/Cargo.toml
+    extracted: workspace.lints（unsafe_code=forbid, clippy pedantic 级别）
+  - source: ref/claude-code-main/src/utils/config.ts
+    extracted: 配置分层优先级链 + Zod schema 验证思路
+---
+
+# R1: Engineering Baseline — 工程基线规则
+
+> **参考来源**: Claw Code `Cargo.toml` 的 workspace lint 严格标准 (`unsafe_code = "forbid"`) + Claude Code 多层配置验证机制。
+>
+> **格式版本**: Phase 2 迁移至 `RULE.mdc` 官方规则文件格式。
+
+## 原则
+
+### P1-1: 安全代码零容忍
+
+- **禁止 `unsafe` 代码**：除非有 explicit team-level 审批，否则任何包含 `unsafe` 块的 PR 必须被阻止
+- **禁止 `unwrap()` 在生产路径**：使用 `?` 操作符或显式错误处理替代
+- **禁止 `panic!()` 在库/API 层**：仅允许在 binary/main 中使用
+
+> 提炼自: `claw-code-main/rust/Cargo.toml` → `[workspace.lints.rust] unsafe_code = "forbid"`
+
+### P1-2: Lint 全量通过是 CI 门控条件
+
+- 项目必须有配置好的 linter（Rust: clippy, JS/TS: ESLint, Python: ruff/flake8/pyright）
+- **CI 必须 lint 检查通过才能合并**，lint 错误数 > 0 直接 fail
+- Lint 规则采用 **pedantic 级别**作为 baseline（可按需放宽特定规则）
+- `#[allow(...)]` 注释必须附说明原因
+
+> 提炼自: `claw-code-main/rust/Cargo.toml` → `[workspace.lints.clippy] all = { level = "warn", pedantic = { level = "warn" } }`
+
+### P1-3: 配置不可含敏感信息
+
+- `settings.json` / `.env` 等配置文件不得包含 API Key、密码、token
+- 敏感凭证必须通过环境变量或密钥管理服务注入
+- 配置文件提交前需通过 `git secrets-scan` 或等价工具检查
+
+> 提炼自: Claude Code `PermissionEnforcer` 的安全边界思想 + Claw Code config.rs 的 ConfigSource 分层设计
+
+## 检查清单
+
+### C1: 代码风格
+
+- [ ] 文件使用 UTF-8 编码，LF 换行符（非 CRLF）
+- [ ] 每个 `.ts/.tsx/.py/.rs` 文件顶部包含模块级文档注释
+- [ ] 函数/方法长度不超过 80 行（超长则拆分）
+- [ ] 单行宽度不超过 120 字符
+- [ ] 使用一致的引号风格（TS: 双引号单属性, Rust: 原始字符串字面量）
+
+### C2: 提交规范
+
+- [ ] commit message 格式遵循 Conventional Commits（`type(scope): subject`）
+- [ ] type 范围: `feat` / `fix` / `docs` / `refactor` / `chore` / `test`
+- [ ] subject 行不超过 50 字符（换行后写 body）
+- [ ] 不允许 `wip:` 或 `WIP:` 提交到 main 分支
+- [ ] 每个 atomic commit 可独立通过 CI 且有意义
+
+### C3: 命名约定
+
+- [ ] 变量/函数使用 `snake_case`（Python/Rust）或 `camelCase`（JS/TS/C#）
+- [ ] 类型/接口使用 `PascalCase`（TS/Rust/C#）/ `UpperCamelCase`（类名）
+- [ ] 常量使用 `UPPER_SNAKE_CASE` 或 `SCREAMING_SNAKE_CASE`
+- [ ] 文件名使用 `kebab-case`（如 `state-flow-auditor/SKILL.md`）或 `PascalCase.cs`（C# 脚本）
+- [ ] 测试文件与源文件同名 + `.test.` 后缀 / `_test.py` 后缀
+- [ ] Unity C# 私有字段使用 `_camelCase` 前缀（如 `_rb`, `_animator`）
+- [ ] Unity Inspector 字段使用 `[SerializeField] private`，不用 `public`
+
+### C4: 文件组织
+
+- [ ] 每个逻辑模块有独立的文件（避免上帝文件 > 500 行）
+- [ ] 目录深度不超过 5 层（过深则重构为子包）
+- [ ] `index.ts` / `lib.rs` / `__init__.py` 作为模块导出入口
+- [ ] 公共 API 与内部实现分离（internal/ or src/ 子目录）
+
+### C5: 依赖管理
+
+- [ ] `package.json` / `requirements.txt` / `Cargo.toml` 锁定版本范围
+- [ ] 不允许 `*` 版本通配符在核心依赖上
+- [ ] 开发依赖与生产依赖分离（devDependencies / [dev-dependencies]）
+- [ ] 第三方依赖必须有安全扫描许可依据
+
+## 示例
+
+### ❌ 违规示例
+
+```rust
+// P1-1 违规: 生产路径 unwrap()
+fn get_user_name(user_id: u64) -> String {
+    db.query(user_id).unwrap() // panic! 如果查询失败
+}
+```
+
+```csharp
+// P1-1 违规: Unity 生产路径无空检查
+public class EnemySpawner : MonoBehaviour {
+    public void SpawnEnemy() {
+        var player = FindObjectOfType<Player>();  // 违规：可能为 null
+        player.TakeDamage(10);                    // 违规：NullReferenceException 风险
+    }
+}
+```
+
+```typescript
+// P1-2 违规: 无 ESLint 配置的 .ts 文件
+// 项目根目录缺少 .eslintrc.js 或 eslint.config.js
+```
+
+### ✅ 合规示例
+
+```rust
+// P1-1 合规: 显式错误处理
+fn get_user_name(user_id: u64) -> Result<String, AppError> {
+    db.query(user_id)
+        .map_err(|e| AppError::DatabaseError(e.to_string()))
+}
+
+// P1-3 合规: 配置不含敏感信息
+// settings.json 只有功能开关，凭证来自环境变量
+let api_key = std::env::var("API_KEY").expect("API_KEY must be set");
+```
+
+```csharp
+// P1-1 合规: Unity 显式空检查 + [SerializeField] 封装
+public class EnemySpawner : MonoBehaviour {
+    [Header("Config")]
+    [SerializeField] private EnemyConfig _config;
+
+    public void SpawnEnemy() {
+        if (_config == null) {
+            Debug.LogError("EnemyConfig not assigned!");
+            return;
+        }
+        var enemy = Instantiate(_config.enemyPrefab);
+        enemy.Initialize(_config);
+    }
+}
+```
+
+```yaml
+# C2 合规: Conventional Commits
+feat(auth): add OAuth2 login support
+
+- Add /auth/login endpoint supporting authorization code flow
+- Integrate with existing User model
+- Include token refresh logic
+```
+
+## 版本历史
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| 0.1.0 | 2026-04-06 | 初始版本（.md 平铺格式） |
+| **0.3.0** | 2026-04-29 | 添加 Unity C# 示例、命名约定补充（_camelCase 私有字段、PascalCase.cs 文件） |
+| 0.2.0 | 2026-04-06 | 迁移至 RULE.mdc 子目录格式 |

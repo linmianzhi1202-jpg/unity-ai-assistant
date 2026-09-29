@@ -1,0 +1,191 @@
+---
+name: lint-gate`
+description: "Lint 门控 — 编辑后检查代码质量：TODO/FIXME 格式、硬编码值、JSON 有效性、设计文档完整性"
+version: "0.2.0"
+event: PostToolUse
+type: prompt
+matcher: "replace_in_file|write_to_file|execute_command"
+timeout: 10
+enabled: true
+category: engineering
+references:
+  - source: "ref/Claude-Code-Game-Studios-main/.claude/hooks/validate-commit.sh"
+    extracted: "Check design documents for required sections, validate JSON data files, check for hardcoded gameplay values, check TODO format"
+---
+
+# H2: Lint Gate — Lint 门控#
+
+## 用途
+
+在文件编辑后自动检查代码质量，确保符合项目标准。
+
+**核心检查目标**：
+1. 设计文档完整性（必需章节存在）
+2. 数据文件有效性（JSON 格式）
+3. 代码质量（硬编码值、TODO 格式）
+4. 游戏性代码规范
+
+## 匹配规则
+
+```
+matcher: "replace_in_file|write_to_file|execute_command"
+```
+
+匹配所有文件编辑和命令执行操作。
+
+## 检查清单#
+
+### C1: 设计文档完整性
+
+当编辑 `design/gdd/**/*.md` 文件时，检查以下 8 个必需章节是否存在：
+- [ ] Overview（概述）
+- [ ] Player Fantasy（玩家幻想）
+- [ ] Detailed（详细说明）
+- [ ] Formulas（公式）
+- [ ] Edge Cases（边缘情况）
+- [ ] Dependencies（依赖关系）
+- [ ] Tuning Knobs（调优参数）
+- [ ] Acceptance Criteria（接受标准）
+
+**验证方法**：
+```
+# 伪代码
+for section in required_sections:
+    if not grep -q "$section" "$file":
+        WARNINGS += f"DESIGN: $file missing required section: $section"
+```
+
+### C2: 数据文件有效性
+
+当编辑 `assets/data/**/*.json` 文件时，验证 JSON 格式：
+
+**验证方法**：
+```
+# 伪代码
+if command -v python >/dev/null 2>&1:
+    if ! python -m json.tool "$file" > /dev/null 2>&1:
+        echo "BLOCKED: $file is not valid JSON" >&2
+        exit 2
+```
+
+### C3: 硬编码游戏性数值检查
+
+当编辑 `src/gameplay/**` 文件时，检查是否有硬编码的游戏性数值：
+
+**检测模式**（使用 grep -E）：
+```
+(damage|health|speed|rate|chance|cost|duration)[[:space:]]*[:=][[:space:]]*[0-9]+
+```
+
+**示例**：
+```gdscript
+# 违规：
+var damage: float = 25.0  # 硬编码游戏性数值
+var speed: float = 5.0  # 未从配置读取
+
+# 合规：
+var damage: float = config.get_value("combat", "base_damage", 10.0)
+var speed: float = stats_resource.movement_speed * delta
+```
+
+### C4: TODO/FIXME 格式检查
+
+当编辑 `src/**` 文件时，检查 TODO/FIXME 是否有所有者标签：
+
+**检测模式**（使用 grep -E）：
+```
+(TODO|FIXME|HACK)[^(]
+```
+
+**正确格式**：
+```python
+# TODO(john): 需要优化性能
+# FIXME(ai_team): 修复边界情况
+```
+
+**错误格式**：
+```python
+# TODO: 需要优化性能  # 违规：缺少所有者标签
+# FIXME: 修复边界情况  # 违规：缺少所有者标签
+```
+
+### C5: 代码风格检查
+
+检查基本代码风格：
+- [ ] 文件使用 UTF-8 编码
+- [ ] 单行宽度不超过 120 字符
+- [ ] 函数/方法长度不超过 80 行
+- [ ] 使用一致的引号风格
+
+## 输出格式#
+
+```json
+{
+  "hookSpecificOutput": {
+    "lintPassed": true | false,
+    "warnings": [
+      "<警告消息1>",
+      "<警告消息2>"
+    ],
+    "errors": [
+      "<错误讯息1>",
+      "<错误讯息2>"
+    ]
+  },
+  "systemMessage": "<可选：向用户展示的检查结果>"
+}
+```
+
+## Prompt 模板#
+
+当此 Hook 被 CodeBuddy 触发时，实际执行的 prompt：
+
+```
+你是一个代码质量门控。当前有文件编辑请求：
+
+工具名: $TOOL_NAME$
+文件路径: $TOOL_INPUT.file_path$
+项目根目录: $CODEBUDDY_PROJECT_DIR$
+
+请执行以下检查：
+
+1. 如果是设计文档（design/gdd/*.md），检查 8 个必需章节
+2. 如果是 JSON 文件（assets/data/*.json），验证 JSON 格式
+3. 如果是游戏性代码（src/gameplay/**），检查硬编码值
+4. 如果是源代码（src/**），检查 TODO/FIXME 格式
+
+输出 JSON 格式结果：
+{
+  "lintPassed": true | false,
+  "warnings": ["<警告消息>"],
+  "errors": ["<错误讯息>"]
+}
+```
+
+## 非阻塞模式#
+
+此 Hook 使用**非阻塞模式**：
+- ✅ 警告（Warnings）→ 显示给用户，但允许继续
+- ❌ 错误（Errors）→ 阻塞操作，需要用户确认
+
+**示例输出**：
+```
+=== Commit Validation Warnings ===
+DESIGN: design/gdd/crafting-system.md missing required section: Formulas
+CODE: src/gameplay/combat.gd has hardcoded gameplay values. Use data files.
+STYLE: src/gameplay/combat.gd has TODO without owner tag. Use TODO(name) format.
+================================
+```
+
+## 版本历史#
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| 0.2.0 | 2026-04-26 | 从 Claude Code Hooks 迁移并中文化 |
+| 0.1.0 | 2026-04-06 | Phase 2 初始实现（CodeBuddy 原有） |
+
+## 后续规划（Phase 3）#
+
+- [ ] 集成 `engineering-baseline` Rule 的严格检查
+- [ ] 支持自定义检查规则配置
+- [ ] 与 `test-coverage` Rule 联动（覆盖率门控）

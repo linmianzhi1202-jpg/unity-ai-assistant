@@ -1,0 +1,124 @@
+---
+name: unity-mcp-project-confirm
+description: "Unity MCP 项目确认规则 — 执行任何 Unity 开发任务前，必须先通过 MCP 确认当前连接的 Unity 项目路径与名称"
+version: 1.0.0
+severity: critical
+enabled: true
+category: workflow
+format: RULE.mdc
+references:
+  - source: "PluginHub.cs get_info 内置命令"
+    extracted: "通过 TCP 协议实时获取 Unity 项目路径、名称、版本信息"
+  - source: "UnityBridge.get_unity_info() 方法"
+    extracted: "Python 端调用 get_info 命令的封装"
+  - source: "get_unity_info MCP 工具"
+    extracted: "暴露给 AI 调用的项目信息查询接口"
+---
+
+# Unity MCP 项目确认规则
+
+## 规则说明
+
+通过 MCP 与 Unity 编辑器连接时，**必须在执行任何 Unity 开发任务前，先调用 `get_unity_info` MCP 工具确认当前连接的 Unity 项目路径与名称**。这确保所有操作都针对正确的项目执行，避免误操作其他 Unity 项目。
+
+## 适用场景
+
+此规则适用于以下场景：
+- 通过 MCP 工具操作 Unity 编辑器（创建对象、修改场景、添加组件等）
+- 通过 MCP 工具查询 Unity 项目信息
+- 通过 MCP 工具执行 Unity 编辑器命令
+- 任何涉及 `unified-mcp-unity` 系统的操作
+
+## 强制流程
+
+### 执行顺序
+
+```
+1. 调用 get_unity_info MCP 工具
+2. 确认返回的 project_name 和 project_path 与预期一致
+3. 在响应中明确声明当前项目信息
+4. 方可执行后续 Unity 开发任务
+```
+
+### 确认格式
+
+每次开始 Unity 开发任务时，必须在回复中包含以下确认信息：
+
+```
+📋 Unity 项目确认：
+- 项目名称：{project_name}
+- 项目路径：{project_path}
+- Unity 版本：{unity_version}
+```
+
+## 违规判定
+
+### 严重违规（CRITICAL）
+
+以下行为被视为严重违规：
+
+1. **未确认项目即执行操作**：在未调用 `get_unity_info` 的情况下，直接执行任何 Unity 操作工具
+2. **忽略项目不匹配**：`get_unity_info` 返回的项目与用户要求的项目不一致，但仍继续操作
+3. **假设项目路径**：基于历史记忆或猜测假设项目路径，而不通过 MCP 实际确认
+
+### 豁免条件
+
+以下情况可豁免此规则：
+
+1. 用户明确表示"跳过项目确认"或类似意思
+2. 同一次对话中已确认过项目，且未发生 Unity 重启或项目切换
+3. 仅执行只读查询操作（如 ping 连接测试）
+
+## get_unity_info 工具说明
+
+### 调用方式
+
+通过 MCP 工具 `get_unity_info` 调用，无需参数：
+
+```
+调用：get_unity_info()
+返回：{
+  "success": true,
+  "tool": "get_unity_info",
+  "result": {
+    "project_path": "E:/MyProject",      // 项目根目录
+    "project_name": "MyProject",          // 项目文件夹名称
+    "assets_path": "E:/MyProject/Assets", // Assets 目录路径
+    "unity_version": "2022.3.57f1c2",     // Unity 版本
+    "port": 6400                          // TCP 端口号
+  }
+}
+```
+
+### 底层通信
+
+```
+AI → get_unity_info MCP 工具
+  → UnityBridge.get_unity_info()
+    → TCP 发送 "get_info" 帧
+      → PluginHub.cs 内置命令处理（不经主线程队列）
+    → 返回项目信息 JSON
+  → MCP 工具返回结果给 AI
+```
+
+### 错误处理
+
+| 错误情况 | 处理方式 |
+|---------|---------|
+| 连接失败 | 提示用户确认 Unity 是否运行且 MCP 已启用 |
+| 超时无响应 | 提示用户检查 TCP 端口 6400 是否可达 |
+| 项目不匹配 | 停止操作，提示用户切换到正确的 Unity 项目 |
+
+## 检查清单
+
+- [ ] 执行 Unity 开发任务前调用了 `get_unity_info`
+- [ ] 确认 `project_name` 与用户预期一致
+- [ ] 确认 `project_path` 与用户预期一致
+- [ ] 在回复中声明了项目确认信息
+- [ ] 项目不匹配时停止操作并提示用户
+
+## 版本历史
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| **v1.0.0** | 2026-04-29 | 新建：定义 Unity MCP 项目确认强制规则 |

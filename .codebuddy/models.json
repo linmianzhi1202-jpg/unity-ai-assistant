@@ -1,0 +1,123 @@
+{
+  "$schema": "https://codebuddy.ai/schemas/models.json",
+  "version": "1.0.0",
+  "description": "Claude Code Game Studios 迁移到 CodeBuddy 的模型路由配置",
+  "default_model": "default",
+  "model_routing": {
+    "tier1_agents": {
+      "description": "Tier 1 总监级代理 — 使用最强模型处理战略决策",
+      "model": "opus",
+      "agents": [
+        "creative-director",
+        "technical-director",
+        "producer"
+      ]
+    },
+    "tier2_agents": {
+      "description": "Tier 2 部门负责人代理 — 使用平衡模型处理领域领导",
+      "model": "sonnet",
+      "agents": [
+        "game-designer",
+        "lead-programmer",
+        "art-director",
+        "audio-director",
+        "narrative-director",
+        "qa-lead",
+        "release-manager",
+        "localization-lead"
+      ]
+    },
+    "tier3_agents": {
+      "description": "Tier 3 专家级代理 — 使用高效模型处理专业任务",
+      "model": "sonnet",
+      "agents": [
+        "gameplay-programmer",
+        "engine-programmer",
+        "ai-programmer",
+        "network-programmer",
+        "tools-programmer",
+        "ui-programmer",
+        "systems-designer",
+        "level-designer",
+        "economy-designer",
+        "technical-artist",
+        "sound-designer",
+        "writer",
+        "world-builder",
+        "ux-designer",
+        "prototyper",
+        "performance-analyst",
+        "devops-engineer",
+        "analytics-engineer",
+        "security-engineer",
+        "qa-tester",
+        "accessibility-specialist",
+        "live-ops-designer",
+        "community-manager",
+        "godot-specialist",
+        "godot-gdscript-specialist",
+        "godot-csharp-specialist",
+        "godot-gdextension-specialist",
+        "godot-shader-specialist",
+        "unity-specialist",
+        "unity-dots-specialist",
+        "unity-shader-specialist",
+        "unity-addressables-specialist",
+        "unity-ui-specialist",
+        "unreal-specialist",
+        "ue-blueprint-specialist",
+        "ue-gas-specialist",
+        "ue-replication-specialist",
+        "ue-umg-specialist"
+      ]
+    },
+    "enhancement_agents": {
+      "description": "CodeBuddy 增强层代理 — 使用默认模型",
+      "model": "default",
+      "agents": [
+        "bug-rootcause-investigator",
+        "security-scanner",
+        "code-reviewer",
+        "coordinator"
+      ]
+    }
+  },
+  "model_aliases": {
+    "opus": {
+      "description": "最强推理能力，用于战略决策和创意方向",
+      "use_cases": [
+        "创意总监的支柱决策",
+        "技术总监的架构决策",
+        "制作人的范围仲裁"
+      ]
+    },
+    "sonnet": {
+      "description": "平衡性能和成本，用于大多数开发任务",
+      "use_cases": [
+        "部门负责人的领域决策",
+        "专家的执行任务",
+        "代码审查和审计"
+      ]
+    },
+    "haiku": {
+      "description": "快速响应，用于简单任务和分类",
+      "use_cases": [
+        "快速分类",
+        "简单查询",
+        "预处理任务"
+      ]
+    },
+    "default": {
+      "description": "系统默认模型，自动选择",
+      "use_cases": [
+        "通用任务",
+        "未指定模型的代理"
+      ]
+    }
+  },
+  "cost_optimization": {
+    "enable": true,
+    "strategy": "tier_based_routing",
+    "description": "根据代理层级自动选择合适的模型，优化成本"
+  }
+}

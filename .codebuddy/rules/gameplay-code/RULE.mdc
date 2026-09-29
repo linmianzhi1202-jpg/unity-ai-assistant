@@ -1,0 +1,297 @@
+---
+name: gameplay-code
+description: "游戏性代码规则 — 所有游戏性代码必须数据驱动、帧率独立、无 UI 引用、接口明确"
+version: 0.3.0
+severity: warning
+enabled: true
+category: engineering
+format: RULE.mdc
+migrated_from: "ref/Claude-Code-Game-Studios-main/.claude/rules/gameplay-code.md"
+references:
+  - source: "Claude Code Game Studios original rule: gameplay-code"
+    extracted: "数据驱动、帧率独立、无 UI 引用、状态机转换表"
+  - source: "CCGS docs/engine-reference/unity/current-best-practices.md"
+    extracted: "C# 9+ record/init、DOTS/ECS ISystem、Input System、Addressables"
+  - source: "CCGS docs/engine-reference/unity/modules/physics.md"
+    extracted: "AddForce vs velocity、NonAlloc API、CharacterController"
+  - source: "CCGS docs/engine-reference/unity/modules/animation.md"
+    extracted: "Animator.SetTrigger/Bool/Float、CrossFade"
+---
+
+# 游戏性代码规则
+
+## 核心原则
+
+所有游戏性代码必须遵循以下核心原则：
+
+### 1. 数据驱动设计
+
+**规则**：所有游戏性数值必须来自外部配置文件/ScriptableObject，**禁止硬编码**。
+
+✅ **正确示例**（数据驱动 — ScriptableObject）：
+```csharp
+[CreateAssetMenu(fileName = "CombatConfig", menuName = "Config/CombatConfig")]
+public class CombatConfig : ScriptableObject {
+    public float baseDamage = 10f;
+    public float criticalMultiplier = 1.5f;
+}
+
+public class CombatSystem : MonoBehaviour {
+    [SerializeField] private CombatConfig config;
+
+    public float CalculateDamage(float multiplier) {
+        return config.baseDamage * multiplier;
+    }
+}
+```
+
+❌ **错误示例**（硬编码）：
+```csharp
+public class CombatSystem : MonoBehaviour {
+    public float CalculateDamage(float multiplier) {
+        float damage = 25f;  // 违规：硬编码游戏性数值
+        return damage * multiplier;
+    }
+}
+```
+
+### 2. 帧率独立性
+
+**规则**：所有时间相关计算**必须**使用 `delta time`。
+
+✅ **正确示例**：
+```csharp
+void Update() {
+    Vector3 movement = direction * speed * Time.deltaTime;
+    transform.position += movement;
+}
+
+// 物理更新使用 FixedUpdate + Time.fixedDeltaTime
+void FixedUpdate() {
+    rb.AddForce(direction * speed * Time.fixedDeltaTime, ForceMode.VelocityChange);
+}
+```
+
+❌ **错误示例**：
+```csharp
+void Update() {
+    Vector3 movement = direction * speed;  // 违规：未使用 deltaTime
+    transform.position += movement;
+}
+```
+
+### 3. 无直接 UI 引用
+
+**规则**：游戏性代码**禁止**直接引用 UI 代码。必须使用事件/Action 进行跨系统通信。
+
+✅ **正确示例**：
+```csharp
+// 游戏性代码 — 通过事件通知
+public class HealthSystem : MonoBehaviour {
+    public event Action<float> OnHealthChanged;
+
+    public void TakeDamage(float amount) {
+        health -= amount;
+        OnHealthChanged?.Invoke(health);  // 通过事件通知 UI
+    }
+}
+
+// UI 代码 — 订阅事件
+public class HealthBarUI : MonoBehaviour {
+    [SerializeField] private HealthSystem healthSystem;
+    [SerializeField] private Slider healthSlider;
+
+    void OnEnable() => healthSystem.OnHealthChanged += UpdateBar;
+    void OnDisable() => healthSystem.OnHealthChanged -= UpdateBar;
+
+    void UpdateBar(float newHealth) => healthSlider.value = newHealth;
+}
+```
+
+❌ **错误示例**：
+```csharp
+// 游戏性代码直接引用 UI（违规）
+public class HealthSystem : MonoBehaviour {
+    public Slider healthSlider;  // 违规：游戏性代码不应知道 UI
+
+    public void TakeDamage(float amount) {
+        health -= amount;
+        healthSlider.value = health;  // 违规：直接操作 UI
+    }
+}
+```
+
+### 4. 明确的接口实现
+
+**规则**：每个游戏性系统**必须**实现清晰的接口。
+
+✅ **正确示例**：
+```csharp
+public interface ICombatSystem {
+    void Initialize(CombatConfig config);
+    float CalculateDamage(float baseDamage, float multiplier);
+    void Shutdown();
+}
+
+public class CombatSystem : MonoBehaviour, ICombatSystem {
+    private CombatConfig _config;
+
+    public void Initialize(CombatConfig config) => _config = config;
+    public float CalculateDamage(float base, float mult) => base * mult;
+    public void Shutdown() { /* cleanup */ }
+}
+```
+
+### 5. 状态机转换表
+
+**规则**：状态机**必须**有显式的转换表和文档化的状态。
+
+✅ **正确示例**：
+```csharp
+public enum PlayerState { Idle, Walking, Attacking, Dead }
+
+public class PlayerStateController : MonoBehaviour {
+    private PlayerState _currentState = PlayerState.Idle;
+
+    // 显式转换表
+    private static readonly Dictionary<PlayerState, HashSet<PlayerState>> Transitions = new() {
+        [PlayerState.Idle]      = new() { PlayerState.Walking, PlayerState.Attacking },
+        [PlayerState.Walking]   = new() { PlayerState.Idle, PlayerState.Attacking, PlayerState.Dead },
+        [PlayerState.Attacking] = new() { PlayerState.Idle, PlayerState.Walking, PlayerState.Dead },
+        [PlayerState.Dead]      = new() { }
+    };
+
+    public bool TryTransition(PlayerState newState) {
+        if (!Transitions[_currentState].Contains(newState)) return false;
+        _currentState = newState;
+        return true;
+    }
+}
+```
+
+❌ **错误示例**：
+```csharp
+// 违规：无转换表，任意状态可任意跳转
+public class PlayerStateController : MonoBehaviour {
+    private int state; // 魔术数字
+
+    void Update() {
+        if (Input.GetKey(KeyCode.W)) state = 1;
+        if (Input.GetKey(KeyCode.Space)) state = 2;
+        // 没有任何转换约束
+    }
+}
+```
+
+### 6. 单元测试
+
+**规则**：**必须**为所有游戏性逻辑编写单元测试 — 将逻辑与表现分离。
+
+✅ **正确示例**：
+```csharp
+// NUnit 测试（Unity Test Framework）
+[Test]
+public void CombatSystem_CalculateDamage_AppliesMultiplier() {
+    var config = ScriptableObject.CreateInstance<CombatConfig>();
+    config.baseDamage = 25f;
+
+    var combat = new GameObject().AddComponent<CombatSystem>();
+    combat.Initialize(config);
+
+    float result = combat.CalculateDamage(1.5f);
+    Assert.AreEqual(37.5f, result);
+}
+```
+
+### 7. 文档化设计文档引用
+
+**规则**：在代码注释中**必须**文档化每个特性实现的设计文档。
+
+✅ **正确示例**：
+```csharp
+/// <summary>
+/// 实现 design/gdd/combat-system.md 第 4.2 节：伤害计算公式
+/// </summary>
+public float CalculateDamage(float baseDamage, float multiplier) {
+    return baseDamage * multiplier;
+}
+```
+
+### 8. 依赖注入而非静态单例
+
+**规则**：**禁止**为游戏状态使用静态单例。必须使用依赖注入或 Service Locator。
+
+✅ **正确示例**（依赖注入）：
+```csharp
+public class GameManager : MonoBehaviour {
+    [SerializeField] private CombatSystem combatSystem;
+    [SerializeField] private MovementSystem movementSystem;
+
+    // 通过 Inspector 注入
+}
+
+// 或通过构造函数/Initialize注入
+public class EnemyAI : MonoBehaviour {
+    private ICombatSystem _combat;
+    private IMovementSystem _movement;
+
+    public void Initialize(ICombatSystem combat, IMovementSystem movement) {
+        _combat = combat;
+        _movement = movement;
+    }
+}
+```
+
+❌ **错误示例**（静态单例）：
+```csharp
+// 违规：使用静态单例
+public class GameState : MonoBehaviour {
+    public static GameState Instance { get; private set; }
+    public float PlayerHealth;
+
+    void Awake() => Instance = this;
+}
+
+public class Enemy : MonoBehaviour {
+    void Attack() {
+        GameState.Instance.PlayerHealth -= 10;  // 违规：紧耦合
+    }
+}
+```
+
+## 适用路径
+
+此规则适用于以下路径：
+- `src/gameplay/**`
+- `Assets/Scripts/Gameplay/**`
+- `Assets/Scripts/Game/**`
+
+## 检查清单
+
+在提交游戏性代码前，请确认：
+
+- [ ] 所有数值来自配置文件/ScriptableObject（无硬编码）
+- [ ] 所有时间相关计算使用 `delta time`（Update → `Time.deltaTime`，FixedUpdate → `Time.fixedDeltaTime`）
+- [ ] 无直接 UI 引用（使用 `event Action<T>` / `UnityEvent<T>`）
+- [ ] 每个系统实现清晰的接口（`ICombatSystem` / `IMovementSystem`）
+- [ ] 状态机有显式转换表（`Dictionary<State, HashSet<State>>`）
+- [ ] 为所有逻辑编写单元测试（NUnit / Unity Test Framework）
+- [ ] 文档化设计文档引用（`<summary>` XML 注释）
+- [ ] 无静态单例（使用 `[SerializeField]` 注入或 `Initialize()` 方法）
+
+## CodeBuddy 增强集成
+
+此规则与 CodeBuddy 增强层集成：
+- 使用 `engineering-baseline` Rule 进行代码质量标准检查
+- 使用 `test-coverage` Rule 进行覆盖率门控
+- 使用 `safe-refactor` Rule 进行安全重构检查
+- 使用 `unity-csharp-patterns` Rule 进行 Unity C# 编码规范检查
+- 使用 `unity-performance` Rule 进行性能正反例校验
+
+## 版本历史
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| **v0.3.0** | 2026-04-29 | 知识灌入：将全部 8 条 GDScript 示例替换为 C# 等价物，添加适用路径 `Assets/Scripts/**`，新增 ❌ 反例 |
+| v0.2.0 | 2026-04-27 | 升级版本号，修复 YAML 格式（去掉引号），完善检查清单 |
+| v0.1.0 | 2026-04-26 | 从 Claude Code Game Studios 迁移并中文化 |

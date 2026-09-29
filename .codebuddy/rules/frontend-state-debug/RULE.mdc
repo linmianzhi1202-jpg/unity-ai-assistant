@@ -1,0 +1,211 @@
+---
+name: frontend-state-debug
+description: 前端状态调试规则 — 针对前端应用的状态管理问题，提供系统化诊断方法论
+version: 0.3.0
+scope: project
+priority: high
+category: debugging
+format: RULE.mdc
+migrated_from: frontend-state-debug.md (Phase 1 → Phase 2)
+triggers:
+  - "React/Vue/Svelte 状态相关 bug"
+  - "组件渲染异常"
+  - "state 更新后视图未刷新"
+  - "useEffect / watch 依赖问题"
+  - "性能问题（多余重渲染）"
+references:
+  - source: ref/claude-code-main/src/tools/AgentTool/builtInAgents.ts
+    extracted: Explore Agent 的 READ-ONLY 模式设计（只读诊断、不修改的系统化排查思路）
+  - source: ref/claw-code-main/rust/crates/runtime/src/worker_boot.rs
+    extracted: State machine first 原则（每个可观测实体应有明确生命周期状态）
+---
+
+# Frontend State Debug Rules#
+
+## 用途#
+
+**定位**：CodeBuddy 增强层的**前端状态调试规则**。
+
+针对 React/Vue/Svelte 等主流框架的状态管理问题，提供系统化诊断方法论。
+
+```
+调试流程:
+  信息收集（只读）
+        ↓
+  静态分析（只读）
+        ↓
+  动态验证（只读）
+        ↓
+  给出修复方案（最小改动）
+```
+
+> **参考来源**:
+> - `ref/claude-code-main` → Explore Agent 的 **READ-ONLY 模式设计**：先观察、不修改的系统化排查思路
+> - `ref/claw-code-main` → **State machine first 原则**：每个可观测实体应有明确生命周期状态
+> - 转化为 CodeBuddy Rule 格式，适配 React/Vue/Svelte 等主流框架
+>
+> **格式版本**: Phase 2 迁移至 `RULE.mdc` 官方规则文件格式。#
+
+## 核心原则#
+
+### P1: 状态可观测优先#
+
+- 任何状态变更必须可通过 DevTools / 日志追踪
+- 关键状态节点应添加结构化日志（非 console.log 散落）
+- 禁止在调试完成后残留 `debugger` 语句或 `console.log`#
+
+### P2: 单向数据流强制#
+
+- 状态修改只能通过预定义的 action/dispatch/mutation 入口
+- 禁止直接修改 props（React）或跨组件直接修改 ref
+- 子组件向父通信必须通过 emit/callback，禁止事件链超过 3 层#
+
+### P3: 渲染边界清晰#
+
+- 每个 hook/effect/watch 的依赖数组必须完整且精确（ESLint react-hooks/exhaustive-deps 规则）
+- 禁止在 render/template 中产生副作用
+- 异步操作的结果必须在状态层统一处理，禁止在组件内部散落 await#
+
+## 诊断检查清单#
+
+### C1: 状态不一致（State Inconsistency）#
+
+| 检查项 | 方法 | 工具 |
+|--------|------|------|
+| 多处 state 冗余存储同一数据 | 搜索相同语义变量名 | search_content |
+| state 与 prop 来源冲突 | 追踪 props 传递链 | code-explorer |
+| 全局状态与本地状态不同步 | 检查 store/localState 映射 | read-only audit |
+
+**修复模式**: 合并为单一 Source of Truth，消除冗余副本。#
+
+### C2: 循环依赖（Circular Dependency）#
+
+```
+检测模式:
+  Component A setState → 触发 B 的 useEffect → B 调用 A 的回调 → 又触发 A setState
+```
+
+**诊断步骤**:
+  1. 绘制组件依赖图（谁监听谁的状态）
+  2. 标注所有 useEffect / watch / computed 的触发源
+  3. 寻找闭环路径
+  4. 在闭环中插入 debounce 或提升状态到共同祖先#
+
+### C3: 闭包陷阱（Stale Closure）#
+
+```javascript
+// ❌ 反例：闭包捕获旧值
+useEffect(() => {
+  const handler = () => setValue(count); // count 是闭包捕获的旧值
+  document.addEventListener('click', handler);
+  return () => document.removeEventListener('click', handler);
+}, []); // 依赖为空，count 永远是初始值
+
+// ✅ 正解：使用 ref 或将依赖加入数组
+const countRef = useRef(count);
+countRef.current = count;
+useEffect(() => {
+  const handler = () => setValue(countRef.current); // 通过 ref 读最新值
+  document.addEventListener('click', handler);
+  return () => document.removeEventListener('click', handler);
+}, []);
+```#
+
+### C4: 内存泄漏（Memory Leak）#
+
+| 泄漏场景 | 检测方法 | 修复 |
+|----------|----------|------|
+| 未清理的 timer/setInterval | 组件卸载后仍触发 | useEffect return cleanup |
+| 未取消的 fetch/EventSource | 组件销毁后回调执行 | AbortController |
+| 事件监听器未移除 | addEventListener 无配对 remove | 清理函数配对 |
+| 订阅未取消（store/eventBus） | unsubscribe 缺失 | 保证 unsubscribe |#
+
+### C5: 不必要重渲染（Unnecessary Re-render）#
+
+**检测工具**: React DevTools Profiler / Vue DevTools Performance#
+
+常见原因排序：
+1. **内联函数/对象作为 prop** → 每次 render 创建新引用 → `useCallback` / `useMemo` / `memo`
+2. **Context value 每次创建新对象** → 将 value 拆分为多个 Context 或 useMemo`
+3. **父组件渲染导致子组件无条件重渲染** → 用 `React.memo` / `v-once` 包裹
+4. **列表 key 使用 index** → 改用稳定唯一 id#
+
+## 示例#
+
+### ❌ 违规示例#
+
+```javascript
+// 违规：在 render 中直接修改 state
+const Component = () => {
+  const [count, setCount] = useState(0);
+  count = count + 1; // 违规：直接修改
+  return <div>{count}</div>;
+};
+
+// 违规：useEffect 依赖不完整
+useEffect(() => {
+  document.title = `Count: ${count}`;
+}, []); // 缺失 count 依赖
+```#
+
+### ✅ 合规示例#
+
+```javascript
+// 合规：通过 setter 修改状态
+const Component = () => {
+  const [count, setCount] = useState(0);
+  const increment = useCallback(() => {
+    setCount(prev => prev + 1); // 使用 updater 函数
+  }, []);
+  return <button onClick={increment}>Click</button>;
+};
+
+// 合规：依赖完整
+useEffect(() => {
+  document.title = `Count: ${count}`;
+}, [count]); // 依赖明确
+```#
+
+## 输出规范#
+
+当此规则被触发时，Agent 应输出：
+
+```markdown
+## 前端状态诊断报告
+
+**问题类型**: <C1-C5 分类>
+**涉及文件**: `<file:path>`
+**根因分析**: <一句话概括>
+
+### 证据链
+1. <证据 1: 代码位置 + 说明>
+2. <证据 2: 数据流追踪>
+3. ...
+
+### 修复建议
+<具体代码修改方案>
+
+### 验证步骤
+1. ...
+2. ...
+```#
+
+## 与其他模块关系#
+
+```
+CODEBUDDY.md
+  ├── rules/engineering-baseline/RULE.mdc
+  │     └── P1-1 安全代码零容忍 ↔ 本 Rule P1 状态可观测（都要求结构化日志）
+  ├── hooks/lint-gate.mdc
+  │     └── 可联动：ESLint react-hooks/exhaustive-deps 自动检查
+  └── skills/state-flow-auditor/SKILL.md
+        └── 系统化审计状态流 ↔ 本 Rule 针对性调试（审计 vs 调试）
+```#
+
+## 版本历史#
+
+| 版本 | 日期 | 变更 |
+|------|------|----------|
+| **v0.3.0** | 2026-04-27 | 升级版本号，修复 YAML 格式（去掉引号），完善诊断检查清单 |
+| v0.2.0 | 2026-04-06 | 迁移至 RULE.mdc 子目录格式 |
+| v0.1.0 | 2026-04-06 | 初始版本（.md 平铺格式） |

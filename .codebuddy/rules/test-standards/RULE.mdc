@@ -1,0 +1,83 @@
+---
+name: test-standards
+description: 测试标准规则 — 所有测试必须命名规范、覆盖率要求、固件模式
+version: 0.3.0
+severity: warning
+enabled: true
+category: engineering
+format: RULE.mdc
+migrated_from: ref/Claude-Code-Game-Studios-main/.claude/rules/test-standards.md
+references:
+  - source: 'Claude Code Game Studios original rule: test-standards'
+    extracted: 所有测试必须命名规范、覆盖率要求、固件模式
+---
+
+# 测试标准规则
+
+## 规则说明
+
+所有测试必须命名规范、覆盖率要求、固件模式
+
+## 适用路径
+
+此规则适用于以下路径：
+- `tests/**`
+- `Assets/Tests/**`
+
+## 规则内容
+
+- ✅ 测试命名：`Test_[系统]_[场景]_[预期结果]` 模式（NUnit）或 `test_[系统]_[场景]_[预期结果]`（其他框架）
+- ✅ 每个测试必须有清晰的 Arrange/Act/Assert 结构
+- ✅ 单元测试不能依赖外部状态（文件系统、网络、数据库）
+- ✅ 集成测试必须在自身之后清理
+- ✅ 性能测试必须指定可接受的阈值，如果超过则失败
+- ✅ 测试数据必须在测试中或专用 fixtures 中定义，永远不能共享可变状态
+- ✅ Mock 外部依赖 — 测试应该快速且确定性
+- ✅ 每个 Bug 修复必须有回归测试，能够捕获原始 Bug
+
+### 正确示例（NUnit + Arrange/Act/Assert）：
+
+```csharp
+[Test]
+public void Test_HealthSystem_TakeDamage_ReducesHealth() {
+    // Arrange
+    var config = ScriptableObject.CreateInstance<HealthConfig>();
+    config.maxHealth = 100;
+    var health = new GameObject().AddComponent<HealthSystem>();
+    health.Initialize(config);
+
+    // Act
+    health.TakeDamage(25);
+
+    // Assert
+    Assert.AreEqual(75, health.CurrentHealth);
+}
+```
+
+### 错误示例（Poor Naming）：
+
+```csharp
+[Test]
+public void Test1() {  // 违规：描述性名称
+    var h = new HealthSystem();
+    h.TakeDamage(25);  // 违规：无 Arrange 步骤
+    Assert.IsTrue(h.CurrentHealth < 100);  // 违规：不精确的断言
+}
+```
+
+## 检查清单
+
+在提交相关代码前，请确认：
+
+- [ ] 测试命名：`Test_[系统]_[场景]_[预期结果]` 模式
+- [ ] 每个测试必须有清晰的 Arrange/Act/Assert 结构
+- [ ] 单元测试不能依赖外部状态（文件系统、网络、数据库）
+- [ ] 集成测试必须在自身之后清理
+
+## 版本历史
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| **v0.3.0** | 2026-04-29 | 清理格式残留，GDScript→C# 示例替换，添加 Unity 适用路径 |
+| v0.2.0 | 2026-04-27 | 升级版本号，翻译英文内容，完善检查清单 |
+| v0.1.0 | 2026-04-26 | 从 Claude Code Game Studios 迁移并中文化 |

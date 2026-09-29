@@ -1,0 +1,390 @@
+---
+name: performance-monitor
+description: "性能监控 — 在工具执行后检查性能影响：内存使用、算法复杂度、数据库查询优化"
+version: "0.2.0"
+event: PostToolUse
+type: prompt
+matcher: "Write|replace_in_file|execute_command"
+timeout: 10
+enabled: true
+category: performance
+references:
+  - source: "ref/Claude-Code-Game-Studios-main/.claude/hooks/validate-commit.sh"
+    extracted: "Performance best practices, complexity analysis"
+  - source: "Claude Code Game Studios performance-analyst agent"
+    extracted: "Performance analysis, bottleneck detection, optimization recommendations"
+---
+
+# H5: Performance Monitor — 性能监控
+
+## 用途
+
+在代码编写/修改后，自动检查性能影响。
+
+**核心检查目标**：
+1. 内存使用（内存泄漏、大对象分配）
+2. 算法复杂度（时间复杂度、空间复杂度）
+3. 数据库查询优化（N+1 问题、缺少索引）
+4. 渲染性能（绘制调用、过度绘制）
+5. 网络性能（请求数量、负载大小）
+
+## 匹配规则
+
+```
+matcher: "Write|replace_in_file|execute_command"
+```
+
+匹配文件写入和命令执行操作。
+
+## 性能检查清单
+
+### P1: 内存使用检查
+
+当编辑代码文件时，检查是否有内存泄漏风险：
+
+**检测模式**：
+- 未释放的资源：`new` 没有对应 `delete`（C++）
+- 未关闭的文件句柄：`fopen()` 没有 `fclose()`
+- 未取消的事件订阅：添加事件处理器但没有取消订阅
+- 大对象分配：在热路径中分配大对象
+
+**正确示例**（C#）：
+```csharp
+// 正确：使用 using 语句自动释放资源
+using (var file = File.Open("data.txt"))
+{
+    // 处理文件
+} // file 自动关闭
+
+// 正确：取消事件订阅
+public void OnEnable()
+{
+    gameManager.OnPlayerDied += HandlePlayerDied;
+}
+
+public void OnDisable()
+{
+    gameManager.OnPlayerDied -= HandlePlayerDied;
+}
+```
+
+**错误示例**（C#）：
+```csharp
+// 错误：内存泄漏
+var file = File.Open("data.txt");
+// 没有 file.Close() 或 file.Dispose()
+
+// 错误：事件订阅泄漏
+public void OnEnable()
+{
+    gameManager.OnPlayerDied += HandlePlayerDied;
+    // 没有在 OnDisable 中取消订阅
+}
+```
+
+### P2: 算法复杂度检查
+
+检查是否有高时间复杂度的算法：
+
+**检测模式**：
+- 嵌套循环：`for` 内嵌套 `for`（O(n²) 或 worst）
+- 递归没有终止条件（Stack Overflow 风险）
+- 在热路径中使用慢速操作（如字符串拼接）
+
+**正确示例**（C#）：
+```csharp
+// 正确：使用字典查找（O(1)）
+var stats = new Dictionary<int, PlayerStats>();
+if (stats.TryGetValue(playerId, out var playerStats))
+{
+    // 使用 playerStats
+}
+
+// 正确：避免在热路径中拼接字符串
+var sb = new StringBuilder();
+for (int i = 0; i < 100; i++)
+{
+    sb.Append(i).Append(",");
+}
+var result = sb.ToString();
+```
+
+**错误示例**（C#）：
+```csharp
+// 错误：嵌套循环（O(n²)）
+for (int i = 0; i < enemies.Count; i++)
+{
+    for (int j = 0; j < bullets.Count; j++)
+    {
+        if (enemies[i].CollidesWith(bullets[j]))
+        {
+            // 处理碰撞
+        }
+    }
+}
+
+// 错误：在热路径中拼接字符串
+var result = "";
+for (int i = 0; i < 100; i++)
+{
+    result += i + ","; // 每次拼接都创建新字符串
+}
+```
+
+### P3: 数据库查询优化检查
+
+检查是否有 N+1 查询问题或缺少索引：
+
+**检测模式**：
+- 在循环中执行数据库查询
+- 没有使用 `Include()` 或 `Join()` 加载关联数据
+- 查询没有使用索引字段
+
+**正确示例**（Entity Framework）：
+```csharp
+// 正确：使用 Include 一次性加载关联数据（解决 N+1 问题）
+var players = dbContext.Players
+    .Include(p => p.Stats)
+    .Include(p => p.Inventory)
+    .Where(p => p.Level > 10)
+    .ToList();
+
+// 正确：在索引字段上查询
+var player = dbContext.Players
+    .Where(p => p.PlayerId == playerId) // PlayerId 应该有索引
+    .FirstOrDefault();
+```
+
+**错误示例**（Entity Framework）：
+```csharp
+// 错误：N+1 查询问题
+var players = dbContext.Players.ToList();
+foreach (var player in players)
+{
+    var stats = dbContext.PlayerStats
+        .Where(s => s.PlayerId == player.Id)
+        .ToList(); // 每个玩家都查询一次数据库
+}
+
+// 错误：在非索引字段上查询
+var players = dbContext.Players
+    .Where(p => p.DisplayName == displayName) // DisplayName 没有索引
+    .ToList();
+```
+
+### P4: 渲染性能检查
+
+当编辑渲染相关代码时，检查是否有性能问题：
+
+**检测模式**：
+- 每帧创建/销毁对象（应该使用对象池）
+- 昂贵的操作在主线程执行（应该使用 Job System 或异步加载）
+- 过多的绘制调用（应该使用批处理或 GPU Instancing）
+
+**正确示例**（Unity）：
+```csharp
+// 正确：使用对象池
+public class BulletPool : MonoBehaviour
+{
+    public static BulletPool Instance;
+    private Queue<GameObject> pooledObjects = new Queue<GameObject>();
+    
+    public GameObject Get()
+    {
+        if (pooledObjects.Count > 0)
+        {
+            var obj = pooledObjects.Dequeue();
+            obj.SetActive(true);
+            return obj;
+        }
+        else
+        {
+            return Instantiate(bulletPrefab);
+        }
+    }
+    
+    public void Return(GameObject obj)
+    {
+        obj.SetActive(false);
+        pooledObjects.Enqueue(obj);
+    }
+}
+
+// 正确：使用 GPU Instancing
+[MaterialPropertyBlockPropertyDrawer]
+public MaterialPropertyBlock propertyBlock;
+for (int i = 0; i < trees.Count; i++)
+{
+    propertyBlock.SetFloat("_Height", trees[i].Height);
+    Graphics.DrawMeshInstanced(treeMesh, 0, treeMaterial, trees[i].Position, Quaternion.identity, 1, propertyBlock);
+}
+```
+
+**错误示例**（Unity）：
+```csharp
+// 错误：每帧创建/销毁对象
+void Update()
+{
+    if (Input.GetMouseButtonDown(0))
+    {
+        var bullet = Instantiate(bulletPrefab); // 创建
+        Destroy(bullet, 2.0f); // 2 秒后销毁（昂贵）
+    }
+}
+
+// 错误：在主线程执行昂贵操作
+void Start()
+{
+    var texture = new Texture2D(2048, 2048);
+    // 同步加载大纹理（卡顿）
+    texture.LoadImage(File.ReadAllBytes("large_texture.png"));
+}
+```
+
+### P5: 网络性能检查
+
+当编辑网络相关代码时，检查是否有性能问题：
+
+**检测模式**：
+- 过于频繁的网络请求（应该用批处理或节流）
+- 过大的负载（应该分页或压缩）
+- 没有使用缓存（应该使用本地缓存减少请求）
+
+**正确示例**：
+```csharp
+// 正确：批处理网络请求
+public IEnumerator SendBatchRequests()
+{
+    var requests = new List<UnityWebRequest>();
+    foreach (var item in items)
+    {
+        requests.Add(UnityWebRequest.Post(url, item.ToJson()));
+    }
+    
+    // 等待所有请求完成
+    yield return new WaitUntil(() => requests.All(r => r.isDone));
+}
+
+// 正确：使用缓存
+public class PlayerCache
+{
+    private Dictionary<int, PlayerData> cache = new Dictionary<int, PlayerData>();
+    
+    public PlayerData GetPlayer(int playerId)
+    {
+        if (cache.ContainsKey(playerId))
+        {
+            return cache[playerId]; // 从缓存读取
+        }
+        else
+        {
+            var data = FetchFromServer(playerId);
+            cache[playerId] = data; // 存入缓存
+            return data;
+        }
+    }
+}
+```
+
+**错误示例**：
+```csharp
+// 错误：过于频繁的网络请求
+void Update()
+{
+    // 每帧都发送请求（灾难！）
+    StartCoroutine(UnityWebRequest.Get(url));
+}
+
+// 错误：没有使用缓存
+public PlayerData GetPlayer(int playerId)
+{
+    // 每次都从服务器获取（昂贵）
+    return FetchFromServer(playerId);
+}
+```
+
+## 输出格式
+
+```json
+{
+  "hookSpecificOutput": {
+    "performancePassed": true | false,
+    "warnings": [
+      "<性能警告1>",
+      "<性能警告2>"
+    ],
+    "errors": [
+      "<性能错误1>",
+      "<性能错误2>"
+    ],
+    "suggestions": [
+      "<优化建议1>",
+      "<优化建议2>"
+    ]
+  },
+  "systemMessage": "<可选：向用户展示的性能报告>"
+}
+```
+
+## Prompt 模板
+
+当此 Hook 被 CodeBuddy 触发时，实际执行的 prompt：
+
+```
+你是一个性能监控器。当前有工具执行完成：
+
+工具名: $TOOL_NAME$
+文件/命令: $TOOL_INPUT$
+
+项目根目录: $CODEBUDDY_PROJECT_DIR$
+
+请执行以下性能检查：
+1. 如果是代码文件，检查内存使用、算法复杂度
+2. 如果包含数据库查询，检查 N+1 问题
+3. 如果包含渲染代码，检查绘制调用、对象创建
+4. 如果包含网络代码，检查请求频率、负载大小
+
+输出 JSON 格式结果：
+{
+  "performancePassed": true | false,
+  "warnings": ["<性能警告>"],
+  "errors": ["<性能错误>"],
+  "suggestions": ["<优化建议>"]
+}
+```
+
+## 非阻塞模式
+
+此 Hook 使用**非阻塞模式**：
+- ✅ 警告（Warnings）→ 显示给用户，不阻塞操作
+- ⚠️ 错误（Errors）→ 显示给用户，建议优化
+- ℹ️ 建议（Suggestions）→ 显示优化建议
+
+**示例输出**：
+```
+=== Performance Monitor ===
+WARNING: memory-leak-risk - Event subscription not unsubscribed in OnDisable
+SUGGESTION: optimization-opportunity - Use object pooling for bullet creation
+=========================
+```
+
+## 集成到 CodeBuddy 增强层
+
+此 Hook 与以下增强功能集成：
+
+- `engineering-baseline` Rule 的性能检查（循环复杂度、内存使用）
+- `test-coverage` Rule 的性能测试要求
+- `cost-tracker` Skill 的性能成本估算
+
+## 版本历史
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| 0.2.0 | 2026-04-26 | 从 Claude Code Hooks 迁移并中文化 |
+| 0.1.0 | 2026-04-06 | Phase 2 初始实现（CodeBuddy 原有） |
+
+## 后续规划（Phase 3）
+
+- [ ] 支持自动性能分析（集成 BenchmarkDotNet / Unity Profiler）
+- [ ] 支持性能回归测试（比较历史性能数据）
+- [ ] 与 `test-coverage` Rule 联动（性能测试覆盖率）

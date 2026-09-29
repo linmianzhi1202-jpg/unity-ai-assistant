@@ -1,0 +1,227 @@
+---
+name: change-log`
+description: "变更审计日志 — 记录所有文件操作，提供会话状态恢复和历史审计追踪"
+version: "0.2.0"
+event: PostToolUse`
+type: prompt`
+matcher: "*"
+timeout: 10`
+enabled: true`
+category: auditing`
+references:
+  - source: "ref/Claude-Code-Game-Studios-main/.claude/hooks/session-start.sh"`
+    extracted: "Session context info (branch, recent commits, active sprint, milestone, bug count, code health)"`
+  - source: "ref/Claude-Code-Game-Studios-main/.claude/hooks/session-stop.sh"`
+    extracted: "Session end logging (archive active.md, record git activity)"`
+---
+
+# H3: Change Log — 变更审计日志#
+
+## 用途#
+
+记录所有文件操作，提供会话状态恢复和历史审计追踪。
+
+**核心功能**：
+1. 记录文件写入/编辑/删除操作
+2. 追踪会话状态（当前工作、未完成任务）
+3. 提供会话恢复支持
+4. 生成审计报告
+
+## 匹配规则#
+
+```
+matcher: "*"
+```
+
+匹配所有工具调用（用于全面审计）。
+
+## 审计清单#
+
+### L1: 文件操作记录#
+
+每次文件操作后，记录以下信息：
+
+```
+[时间戳] 工具：文件路径
+  - 操作类型：Write / Edit / replace_in_file / delete_file
+  - 文件路径：绝对路径
+  - 文件大小：（如果可用）
+  - Git 状态：是否已跟踪、是否有未提交更改
+```
+
+**记录位置**：`production/session-logs/change-log.txt`
+
+### L2: Git 状态追踪#
+
+定期记录 Git 状态：
+
+```
+[时间戳] Git 状态
+  - 当前分支：{branch_name}
+  - 未暂存更改：{list}
+  - 已暂存更改：{list}
+  - 未跟踪文件：{list}
+```
+
+**记录位置**：`production/session-logs/git-status.txt`
+
+### L3: 会话状态管理#
+
+维护当前会话状态文件：`production/session-state/active.md`
+
+**状态文件格式**：
+```markdown
+# 会话状态
+
+## 当前工作
+- 正在编辑：{file_path}
+- 相关任务：{task_id}
+- 进度：{percentage}%
+
+## 未完成事项
+- [ ] {task_1}
+- [ ] {task_2}
+
+## 下次继续
+1. {next_step_1}
+2. {next_step_2}
+
+## 打开的文件
+- {file_path_1}
+- {file_path_2}
+
+## Git 状态
+- 分支：{branch_name}
+- 未提交更改：{count}
+```
+
+### L4: 设计文档变更追踪#
+
+当编辑设计文档（`design/gdd/**/*.md`）时，记录变更：
+
+```
+[时间戳] 设计文档变更：{file_path}
+  - 变更章节：{section_name}
+  - 变更类型：新增 / 修改 / 删除
+  - 影响评估：{impact_description}
+```
+
+### L5: 审计报告生成#
+
+定期生成审计报告：
+
+**报告位置**：`production/session-logs/audit-report-{date}.md`
+
+**报告内容**：
+```markdown
+# 审计报告 - {date}
+
+## 文件操作统计
+- 总操作次数：{count}
+- 写入操作：{write_count}
+- 编辑操作：{edit_count}
+- 删除操作：{delete_count}
+
+## Git 活动
+- 提交次数：{commit_count}
+- 分支变更：{branch_changes}
+
+## 设计文档变更
+- 变更文档数：{doc_count}
+- 变更章节数：{section_count}
+
+## 未完成任务
+- {task_1}
+- {task_2}
+```
+
+## 输出格式#
+
+```json
+{
+  "hookSpecificOutput": {
+    "logged": true | false,
+    "logFile": "<日志文件路径>",
+    "message": "<记录的消息>"
+  },
+  "systemMessage": "<可选：向用户展示的审计消息>"
+}
+```
+
+## Prompt 模板#
+
+当此 Hook 被 CodeBuddy 触发时，实际执行的 prompt：
+
+```
+你是一个变更审计员。当前有文件操作请求：
+
+工具名: $TOOL_NAME$
+操作类型: $TOOL_INPUT.operation_type$  # Write / Edit / delete_file
+文件路径: $TOOL_INPUT.file_path$
+项目根目录: $CODEBUDDY_PROJECT_DIR$
+
+请执行以下审计：
+1. 记录此次操作到日志文件
+2. 更新会话状态文件（active.md）
+3. 如果是设计文档，记录变更章节
+4. 更新 Git 状态追踪
+
+输出 JSON 格式结果：
+{
+  "logged": true | false,
+  "logFile": "<日志文件路径>",
+  "message": "<记录的消息>"
+}
+```
+
+## 会话恢复功能#
+
+### 恢复流程#
+
+当开始新会话时，读取 `production/session-state/active.md`：
+
+```
+1. 读取 active.md
+2. 显示当前工作状态
+3. 显示未完成事项
+4. 显示打开的文件
+5. 询问用户是否恢复
+```
+
+### 恢复 Prompt#
+
+```
+检测到之前的会话状态：
+
+当前工作：{file_path}
+进度：{percentage}%
+
+未完成事项：
+- [ ] {task_1}
+- [ ] {task_2}
+
+是否恢复此会话状态？
+[y/n]
+```
+
+## CodeBuddy 增强集成#
+
+此 Hook 与以下增强功能集成：
+
+- `policy-executable` Rule 的 P1-P7 策略检查（记录策略合规性）
+- `parity-audit` Skill 的 9-lane 审计（定期生成审计报告）
+- `context-compactor` Skill 的上下文管理（在压缩前保存状态）
+
+## 版本历史#
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| 0.2.0 | 2026-04-26 | 从 Claude Code Hooks 迁移并中文化 |
+| 0.1.0 | 2026-04-06 | Phase 2 初始实现（CodeBuddy 原有） |
+
+## 后续规划（Phase 3）#
+
+- [ ] 支持自定义审计规则配置
+- [ ] 支持审计报告导出（PDF、JSON）
+- [ ] 与 `git blame` 集成（追踪代码变更作者）
+- [ ] 自动生成变更统计图表

@@ -1,0 +1,208 @@
+---
+name: ui-code
+description: UI 代码规则 — 所有 UI 代码必须无游戏状态所有权、本地化就绪、可访问性
+version: 0.3.0
+severity: warning
+enabled: true
+category: engineering
+format: RULE.mdc
+migrated_from: ref/Claude-Code-Game-Studios-main/.claude/rules/ui-code.md
+references:
+  - source: 'Claude Code Game Studios original rule: ui-code'
+    extracted: 所有 UI 代码必须无游戏状态所有权、本地化就绪、可访问性
+  - source: "CCGS docs/engine-reference/unity/modules/ui.md"
+    extracted: "UI Toolkit vs UGUI、UXML+USS+C# 工作流、数据绑定/MVVM"
+  - source: "CCGS docs/engine-reference/unity/modules/input.md"
+    extracted: "Input System 事件驱动、手柄导航、Control Schemes"
+---
+
+# UI 代码规则
+
+## 规则说明
+
+所有 UI 代码必须无游戏状态所有权、本地化就绪、可访问性
+
+## 适用路径
+
+此规则适用于以下路径：
+- `src/ui/**`
+- `Assets/Scripts/UI/**`
+- `Assets/UI/**`
+
+## 规则内容
+
+- ✅ UI 永远不能拥有或直接修改游戏状态 — 仅显示，使用命令/事件请求变更
+- ✅ 所有 UI 文本必须通过本地化系统 — 无硬编码用户面向字符串
+- ✅ 所有交互元素必须支持键盘/鼠标 AND 手柄输入
+- ✅ 所有动画必须可跳过并尊重用户动作偏好
+- ✅ UI 声音通过音频事件系统触发，不直接触发
+- ✅ UI 永远不能阻塞游戏线程
+- ✅ 可缩放文本和色盲模式是强制性的，不是可选的
+- ✅ 在所有支持的最小和最大分辨率下测试所有屏幕
+
+## 示例
+
+### UI Toolkit 数据绑定（Unity 6 推荐）
+
+✅ **正确**（UI Toolkit + 事件驱动 — UI 不拥有状态）：
+```csharp
+using UnityEngine.UIElements;
+
+public class MainMenu : MonoBehaviour {
+    void OnEnable() {
+        var root = GetComponent<UIDocument>().rootVisualElement;
+
+        var playButton = root.Q<Button>("play-button");
+        playButton.clicked += OnPlayClicked;  // 事件驱动，不直接修改游戏状态
+
+        var scoreLabel = root.Q<Label>("score");
+        scoreLabel.text = $"High Score: {PlayerPrefs.GetInt("HighScore")}";
+    }
+
+    void OnPlayClicked() {
+        // 通过事件/命令请求游戏开始，不直接修改 GameState
+        GameEvents.RequestGameStart?.Invoke();
+    }
+}
+```
+
+❌ **错误**（UGUI + 直接修改游戏状态）：
+```csharp
+using UnityEngine.UI;
+
+public class MainMenu : MonoBehaviour {
+    public Button playButton;
+    public GameState gameState;  // 违规：UI 直接持有游戏状态引用
+
+    void Start() {
+        playButton.onClick.AddListener(() => {
+            gameState.currentLevel = 1;  // 违规：UI 直接修改游戏状态
+            gameState.StartGame();       // 违规：UI 不应调用游戏逻辑
+        });
+    }
+}
+```
+
+### MVVM 模式（UI 从数据读取，永远不拥有状态）
+
+✅ **正确**：
+```csharp
+// ViewModel — 中间层
+public class HealthViewModel {
+    public float CurrentHealth { get; private set; }
+    public event Action<float> OnHealthChanged;
+
+    public void UpdateHealth(float newHealth) {
+        CurrentHealth = newHealth;
+        OnHealthChanged?.Invoke(newHealth);
+    }
+}
+
+// View — UI 只负责显示
+public class HealthBarView : MonoBehaviour {
+    [SerializeField] private Slider healthSlider;
+    private HealthViewModel _viewModel;
+
+    public void Bind(HealthViewModel viewModel) {
+        _viewModel = viewModel;
+        _viewModel.OnHealthChanged += UpdateDisplay;
+    }
+
+    void UpdateDisplay(float health) {
+        healthSlider.value = health;  // 仅更新显示
+    }
+}
+```
+
+### 本地化
+
+✅ **正确**（本地化系统）：
+```csharp
+using UnityEngine.Localization;
+using UnityEngine.Localization.Settings;
+
+public class LocalizedUI : MonoBehaviour {
+    [SerializeField] private LocalizedString gameOverText;
+
+    void OnEnable() {
+        gameOverText.StringChanged += UpdateText;
+    }
+
+    void OnDisable() {
+        gameOverText.StringChanged -= UpdateText;
+    }
+
+    void UpdateText(string value) {
+        label.text = value;  // 自动适配语言
+    }
+}
+```
+
+❌ **错误**（硬编码字符串）：
+```csharp
+label.text = "Game Over";  // 违规：硬编码用户面向字符串
+```
+
+### UI Toolkit 列表池化
+
+✅ **正确**（动态列表池化元素）：
+```csharp
+public class InventoryListView : MonoBehaviour {
+    private ListView _listView;
+
+    void OnEnable() {
+        var root = GetComponent<UIDocument>().rootVisualElement;
+        _listView = root.Q<ListView>("inventory-list");
+
+        _listView.makeItem = () => new InventoryItemUI();  // 创建模板
+        _listView.bindItem = (element, index) => {
+            var item = (InventoryItemUI)element;
+            item.Bind(items[index]);  // 绑定数据
+        };
+        _listView.itemsSource = items;
+    }
+}
+```
+
+### 输入系统 — UI 事件驱动
+
+✅ **正确**（Input System + 事件回调）：
+```csharp
+using UnityEngine.InputSystem;
+
+public class UIInputHandler : MonoBehaviour {
+    private PlayerControls controls;
+
+    void Awake() {
+        controls = new PlayerControls();
+        controls.UI.Navigate.performed += ctx => {
+            Vector2 dir = ctx.ReadValue<Vector2>();
+            NavigateUI(dir);
+        };
+        controls.UI.Submit.performed += ctx => SubmitCurrent();
+    }
+
+    void OnEnable() => controls.UI.Enable();
+    void OnDisable() => controls.UI.Disable();
+}
+```
+
+## 检查清单
+
+在提交相关代码前，请确认：
+
+- [ ] UI 永远不能拥有或直接修改游戏状态 — 使用事件/命令请求变更
+- [ ] 所有 UI 文本必须通过本地化系统 — 无硬编码用户面向字符串
+- [ ] 所有交互元素必须支持键盘/鼠标 AND 手柄输入
+- [ ] 使用 UI Toolkit（新项目）或 UGUI + MVVM（遗留项目）
+- [ ] 动态列表使用池化（ListView makeItem/bindItem）
+- [ ] UI 动画必须可跳过并尊重用户动作偏好
+- [ ] 在所有分辨率下测试 UI 布局
+
+## 版本历史
+
+| 版本 | 日期 | 变更 |
+|------|------|------|
+| **v0.3.0** | 2026-04-29 | 知识灌入：注入 UI Toolkit C# 示例、MVVM 模式、本地化、Input System UI 交互、列表池化，添加 Unity 适用路径 |
+| v0.2.0 | 2026-04-27 | 升级版本号，翻译英文内容，完善检查清单 |
+| v0.1.0 | 2026-04-26 | 从 Claude Code Game Studios 迁移并中文化 |
