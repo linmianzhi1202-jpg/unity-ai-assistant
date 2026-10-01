@@ -6,25 +6,23 @@ This product server can reuse the local game source code knowledge base at:
 
 Use it before changing gameplay, UI, prefab, or systems code. The intended flow is:
 
-1. Search similar game source code with `search_game_code`.
-2. Use `search_game_code_graph` when the feature spans classes or call chains.
-3. Adapt the best references into one existing project script with `adapt_game_code`.
-4. Preview first, then set `apply=true` only when the generated script looks right.
-5. Refresh/compile Unity and check console logs.
+1. Put the Unity project or selected source projects under `game_source/`. Keep `base_kb/` reserved for the Unity 2022.3 API knowledge base.
+2. Run the project virtual-environment Python from this directory. Relative output paths in `config/config_game.yaml` resolve here, producing `data/chromadb/` and `data/game_code_graph.json`.
+3. Search similar game source code with `search_game_code`.
+4. Use `search_game_code_graph` or `knowledge_graph_search_game_code` when the feature spans classes or call chains.
+5. Use `knowledge_unified_search(..., sources=["game_code_graph"])` when combining current-project code relationships with Unity API retrieval.
+6. Adapt the best references into one existing project script with `adapt_game_code`.
+7. Preview first, then set `apply=true` only when the generated script looks right.
+8. Refresh/compile Unity and check console logs.
 
 ## Build Or Rebuild
 
-From the workspace root:
+From the workspace root, double-click `build_game_rag.bat` (or run it from a terminal):
 
 ```powershell
-cd <项目目录>\Server\data\game-rag-knowledge-base
-python build_game_rag.py
-```
-
-For a clean rebuild:
-
-```powershell
-python build_game_rag.py --clear
+build_game_rag.bat              # build (incremental graph merge)
+build_game_rag.bat --stats      # check statistics
+build_game_rag.bat --clear      # clean rebuild
 ```
 
 Check product-side status:
@@ -34,7 +32,34 @@ game_code_stats()
 knowledge_modules()
 ```
 
-`knowledge_modules` includes a `game_source_code` section with config, vector store, graph, and build status.
+`knowledge_modules` includes a `game_source_code` section with config, vector store, graph, and build status. An existing `game-rag-knowledge-base/` directory alone is not enough: the module becomes active only after `data/chromadb/` contains the `game_source_code` collection.
+
+## Relationship to the Unity API KB
+
+`Server/data/base_kb/` contains the downloaded Unity 2022.3 API indexes. `Server/data/game-rag-knowledge-base/` contains only the current project source index and is built from your own `game_source/` files. Use both when a task needs Unity API facts and project-specific implementation patterns:
+
+The optional cross-project LightRAG is a separate source. Build it only when you have a prepared `game_code_graph.json` and want reusable patterns from other projects:
+
+```text
+knowledge_graph_search_external_game_code(
+  query="tower targeting and projectile damage patterns",
+  mode="hybrid",
+  only_need_context=True
+)
+knowledge_unified_search(
+  query="tower targeting and projectile damage patterns",
+  sources=["external_game_graph"]
+)
+```
+
+`knowledge_graph_search_game_code` searches the current project's vector plus code graph. Its compatibility `mode` is translated to `top_k` and `traverse_depth`, and the response reports `mode_applied_as`. The external tool uses native LightRAG modes directly.
+
+```text
+knowledge_unified_search(
+  query="Projectile collision applies damage in the current project",
+  sources=["vector", "game_code_graph"]
+)
+```
 
 ## Query Examples
 

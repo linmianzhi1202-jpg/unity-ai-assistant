@@ -15,6 +15,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Set, Tuple
 
 _SERVER_SRC = Path(__file__).resolve().parents[3] / "src"
+_GAME_RAG_ROOT = Path(__file__).resolve().parents[1]
 if str(_SERVER_SRC) not in sys.path:
     sys.path.insert(0, str(_SERVER_SRC))
 
@@ -27,6 +28,20 @@ except ImportError as exc:
     print(f"?????????? RAG embedding ??: {exc}")
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_config_paths(config: Optional[dict]) -> dict:
+    """Resolve game-RAG paths relative to this packaged knowledge-base root."""
+    resolved = dict(config or {})
+    for section, key in (("vector_store", "persist_directory"), ("graph", "file_path")):
+        values = dict(resolved.get(section) or {})
+        value = values.get(key)
+        if value:
+            path = Path(value)
+            values[key] = str(path if path.is_absolute() else (_GAME_RAG_ROOT / path).resolve())
+        resolved[section] = values
+    return resolved
+
 
 try:
     from code_graph_extractor import GameCodeGraph, load_graph as _load_game_graph
@@ -188,7 +203,7 @@ class GameCodeSearcher:
     }
 
     def __init__(self, config: Optional[dict] = None):
-        self.config = config or {}
+        self.config = _resolve_config_paths(config)
         self._embedding_manager = None
         self._retriever: Optional[GameCodeRetriever] = None
         self._retriever_error: str | None = None

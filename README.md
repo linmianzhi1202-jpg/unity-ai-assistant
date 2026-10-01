@@ -21,7 +21,7 @@ knowledge_search(query="Rigidbody.AddForce", include_full_content=True)
 knowledge_unified_search(query="GameObject 和 Component 的关系", sources=["vector", "api_graph"])
 ```
 
-> Unity API 知识库（22702 条 API，约 738MB）不随仓库分发，需从 GitHub Release 下载，详见 [使用说明](使用说明.md)。
+> Unity API 知识库（22702 条 API，约 738MB）不随仓库分发，需从 GitHub Release 下载，详见 [使用说明](使用说明.md)。当前项目源码需要另行放入 `Server/data/game-rag-knowledge-base/game_source/` 并构建，不能放进 `base_kb/`。
 
 详细安装、环境变量、换电脑部署与故障排查见 [使用说明](使用说明.md)。已实现工具列表以客户端 `tools/list` 为准；`run_tests` 已接入 Unity Test Runner，支持 EditMode / PlayMode。
 

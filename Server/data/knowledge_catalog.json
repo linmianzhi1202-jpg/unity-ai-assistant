@@ -1,46 +1,85 @@
 {
-  "version": "1.0.0",
-  "description": "Unity AI 开发助手 — 知识库模块清单",
-  "last_updated": "2026-05-15",
+  "version": "1.1.0",
+  "description": "Unity AI 开发助手的知识库模块清单",
+  "last_updated": "2026-10-01",
   "modules": {
     "base_kb": {
       "name": "Unity API 基础知识库",
-      "version": "1.0.0",
-      "description": "包含 22,702 个 Unity API 文档（C# 类/方法/属性/参数/枚举/命名空间）、8,514 个代码示例、完整知识图谱（LightRAG）和向量索引（ChromaDB/bge-m3 1024维）",
+      "version": "1.1.0",
+      "description": "Unity 2022.3 官方 API 文档的 LightRAG 图谱与 ChromaDB 向量索引。",
       "builtin": true,
       "required": true,
-      "size_mb": 250,
+      "status": "installed",
+      "root": "Server/data/base_kb",
+      "size_mb": 738,
       "contents": {
         "lightrag_db_v3_structured": {
-          "description": "LightRAG 知识图谱 — 实体/关系/文档chunk",
-          "files": ["graph_chunk_entity_relation.graphml", "vdb_entities.json", "vdb_relationships.json", "kv_store_text_chunks.json"],
-          "entity_count": 50000,
-          "relation_count": 120000
+          "description": "Unity API LightRAG 知识图谱与文档块",
+          "text_chunk_count": 22702
         },
         "chroma_db_v3": {
-          "description": "ChromaDB 向量存储 — bge-m3 1024维嵌入",
+          "description": "Unity API ChromaDB 向量存储",
+          "collection": "unity_api_v3",
+          "document_count": 31181,
           "model": "BAAI/bge-m3",
           "dimension": 1024
         }
       }
     },
-    "ext_game_patterns": {
-      "name": "游戏开发模式扩展包",
+    "game_source_code": {
+      "name": "当前项目游戏源码 RAG",
       "version": "1.0.0",
-      "status": "available",
-      "description": "14+ 完整 Unity 游戏项目的源码知识图谱（LightRAG），支持跨游戏代码关系推理。覆盖塔防、Roguelike、卡牌、射击、跑酷等类型。通过 build_game_code_lightrag.py 构建，提供 knowledge_graph_search_game_code MCP 工具查询。",
+      "status": "not_built",
+      "description": "扫描 game_source 中的 Unity C# 源码，生成独立 ChromaDB 向量索引和 game_code_graph.json 代码关系图谱。",
+      "builtin": true,
+      "required": false,
+      "root": "Server/data/game-rag-knowledge-base",
+      "source_root": "Server/data/game-rag-knowledge-base/game_source",
+      "build_script": "Server/data/game-rag-knowledge-base/build_game_rag.py",
+      "outputs": [
+        "Server/data/game-rag-knowledge-base/data/chromadb",
+        "Server/data/game-rag-knowledge-base/data/game_code_graph.json"
+      ],
+      "tools": [
+        "search_game_code",
+        "search_game_code_graph",
+        "knowledge_graph_search_game_code",
+        "knowledge_unified_search(sources=[\"game_code_graph\"])"
+      ]
+    },
+    "ext_game_patterns": {
+      "name": "跨项目游戏开发模式 LightRAG 扩展包",
+      "version": "1.0.0",
+      "status": "not_installed",
+      "description": "可选的跨项目游戏源码 LightRAG 扩展，独立于当前项目的 game-rag-knowledge-base；安装后才可使用。",
       "builtin": false,
       "required": false,
       "estimated_size_mb": 500,
-      "build_script": "scripts/build_game_code_lightrag.py",
+      "build_script": "Server/scripts/build_game_code_lightrag.py",
+      "retrieval_tool": "knowledge_graph_search_external_game_code",
+      "retrieval_source": "external_game_graph",
+      "unified_search": "knowledge_unified_search(sources=[\"external_game_graph\"])",
+      "root": "Server/data/base_kb/lightrag_db_game_code",
       "download_url": null,
       "contents": {
         "lightrag_db_game_code": {
-          "description": "游戏源码 LightRAG 知识图谱 — 31503 实体，52653 关系（排除 same_game）",
-          "entity_types": ["GameProject", "GameSourceFile", "GameClass", "GameMethod", "GameField", "GameAsset"],
-          "relation_types": ["CONTAINS_CLASS", "HAS_METHOD", "HAS_FIELD", "INHERITS_FROM", "CALLS_METHOD", "USES_ASSET"],
-          "games": 14,
-          "injection": "零 LLM 调用，insert_custom_kg 通道"
+          "description": "跨项目游戏源码 LightRAG 知识图谱",
+          "entity_types": [
+            "GameProject",
+            "GameSourceFile",
+            "GameClass",
+            "GameMethod",
+            "GameField",
+            "GameAsset"
+          ],
+          "relation_types": [
+            "CONTAINS_CLASS",
+            "HAS_METHOD",
+            "HAS_FIELD",
+            "INHERITS_FROM",
+            "CALLS_METHOD",
+            "USES_ASSET"
+          ]
         }
       }
     },
@@ -48,18 +87,17 @@
       "name": "Unity 深度知识扩展包",
       "version": null,
       "status": "not_installed",
-      "description": "Unity 引擎深度知识 — 渲染管线 (URP/HDRP)、DOTS/ECS、Addressables、UI Toolkit、Netcode、Input System 等高级主题的专项知识图谱",
+      "description": "Unity 引擎深度知识扩展，例如 URP/HDRP、DOTS/ECS、Addressables、UI Toolkit、Netcode 和 Input System。",
       "builtin": false,
       "required": false,
       "estimated_size_mb": 300,
-      "download_url": null,
       "contents": {}
     },
     "ext_asset_library": {
       "name": "Unity 外部 3D 资产知识库",
       "version": "1.0.0",
       "status": "ready_to_build",
-      "description": "扫描 UnityAssetLibrary 中的 asset.json，将 Prefab、模型、材质、纹理依赖和自然语言标签写入独立 ChromaDB 集合，并支持保留 .meta/GUID 导入当前 Unity 项目。",
+      "description": "独立资产库模块；扫描 asset.json 并写入单独的 ChromaDB 集合。",
       "builtin": false,
       "required": false,
       "collection": "unity_asset_library",

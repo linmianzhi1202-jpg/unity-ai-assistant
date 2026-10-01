@@ -14,7 +14,7 @@ _BASE_KB_DIR = _DATA_DIR / "base_kb"
 _EXT_KB_DIR = _DATA_DIR / "ext_kb"
 _UNIFIED_CHROMA_DIR = str(_BASE_KB_DIR / "chroma_db_v3")
 _UNIFIED_LIGHTRAG_DIR = str(_BASE_KB_DIR / "lightrag_db_v3_structured")
-_UNIFIED_GAME_CODE_LIGHTRAG_DIR = str(_BASE_KB_DIR / "lightrag_db_game_code")
+_EXTERNAL_GAME_CODE_LIGHTRAG_DIR = _BASE_KB_DIR / "lightrag_db_game_code"
 
 def _get_unified_vector_store():
     return get_vector_store("unity_api_v3", _UNIFIED_CHROMA_DIR)
@@ -23,9 +23,43 @@ def _get_unified_lightrag_store():
     from services.rag.lightrag_store import get_lightrag_store
     return get_lightrag_store(_UNIFIED_LIGHTRAG_DIR)
 
-def _get_unified_game_code_lightrag_store():
+def _get_external_game_code_lightrag_store():
+    """Return the optional cross-project game-pattern LightRAG store."""
     from services.rag.lightrag_store import get_game_code_lightrag_store
-    return get_game_code_lightrag_store(_UNIFIED_GAME_CODE_LIGHTRAG_DIR)
+    return get_game_code_lightrag_store(str(_EXTERNAL_GAME_CODE_LIGHTRAG_DIR))
+
+
+def _get_external_game_code_module_status() -> dict[str, Any]:
+    """Report the optional cross-project LightRAG independently from current-project RAG."""
+    graph_path = _EXTERNAL_GAME_CODE_LIGHTRAG_DIR / "graph_chunk_entity_relation.graphml"
+    status = {
+        "id": "external_game_code",
+        "name": "跨项目游戏开发模式 LightRAG",
+        "source": "external_game_graph",
+        "installed": _EXTERNAL_GAME_CODE_LIGHTRAG_DIR.exists(),
+        "status": "not_installed",
+        "root": str(_EXTERNAL_GAME_CODE_LIGHTRAG_DIR),
+        "build_script": "Server/scripts/build_game_code_lightrag.py",
+        "graph": {"file_path": str(graph_path), "exists": graph_path.exists()},
+    }
+    if graph_path.exists():
+        status["status"] = "active"
+    elif _EXTERNAL_GAME_CODE_LIGHTRAG_DIR.exists():
+        status["status"] = "not_built"
+    return status
+
+
+def _game_graph_search_params(mode: str) -> tuple[str, int, int]:
+    """Translate the legacy LightRAG mode names to current vector+graph parameters."""
+    normalized = mode if mode in {"local", "global", "hybrid", "naive"} else "hybrid"
+    params = {
+        "local": (5, 1),
+        "global": (8, 3),
+        "hybrid": (5, 2),
+        "naive": (5, 1),
+    }
+    top_k, traverse_depth = params[normalized]
+    return normalized, top_k, traverse_depth
 
 def _search_vector(query, count, search_type="all", include_full_content=False):
     store = _get_unified_vector_store()
@@ -60,13 +94,13 @@ async def arun_knowledge_unified_search(query: str, sources: list | None = None,
     if sources is None:
         sources = ["vector", "api_graph"] if include_graph_context is True else ["vector"]
     sources = list(dict.fromkeys(sources))
-    valid = {"vector", "api_graph", "game_code_graph"}
+    valid = {"vector", "api_graph", "game_code_graph", "external_game_graph"}
     if not sources or any(source not in valid for source in sources):
         return {"status": "error", "query": query, "error": "Invalid sources", "source_breakdown": {}}
     result = {
         "status": "ok", "query": query, "search_method": "unified", "sources_used": sources,
         "source_breakdown": {}, "vector_results": [], "api_graph_context": None,
-        "game_code_context": None, "merged_answer": "",
+        "game_code_context": None, "external_game_context": None, "merged_answer": "",
     }
 
     async def retrieve(source):
@@ -77,13 +111,52 @@ async def arun_knowledge_unified_search(query: str, sources: list | None = None,
                 ), config.rag_timeout)
                 result["vector_results"] = items
                 return {"status": "ok" if items else "empty", "result_count": len(items), "total_indexed": total}
-            store = _get_unified_lightrag_store() if source == "api_graph" else _get_unified_game_code_lightrag_store()
+            if source == "game_code_graph":
+                # Current-project source RAG: vector search plus game_code_graph.json.
+                from services.tools.game_code_tools import search_game_code_graph_context
+
+                _, top_k, traverse_depth = _game_graph_search_params(graph_mode)
+                payload = await asyncio.to_thread(
+                    search_game_code_graph_context, query, top_k, traverse_depth
+                )
+                if payload.get("status") == "unavailable":
+                    return {
+                        "status": "unavailable",
+                        "message": payload.get("error", "Game source RAG is not available"),
+                    }
+                if payload.get("status") == "error":
+                    return {"status": "error", "message": payload.get("error", "Game source graph search failed")}
+                context = json.dumps(payload.get("result", {}), ensure_ascii=False, indent=2)
+                result["game_code_context"] = context
+                applied_mode, applied_top_k, applied_depth = _game_graph_search_params(graph_mode)
+                return {
+                    "status": payload.get("status", "empty"),
+                    "mode": applied_mode,
+                    "mode_applied_as": {"top_k": applied_top_k, "traverse_depth": applied_depth},
+                    "root": "Server/data/game-rag-knowledge-base",
+                }
+
+            if source == "external_game_graph":
+                store = _get_external_game_code_lightrag_store()
+                status = store.get_status()
+                if not status.get("graph_exists"):
+                    return {"status": "unavailable", "message": "External game graph is not built",
+                            "root": str(_EXTERNAL_GAME_CODE_LIGHTRAG_DIR)}
+                mode = graph_mode if graph_mode in {"local", "global", "hybrid", "naive"} else "hybrid"
+                context = await store.aquery(query, mode=mode, only_need_context=True)
+                result["external_game_context"] = context
+                return {"status": "ok" if context else "empty", "mode": mode,
+                        "root": str(_EXTERNAL_GAME_CODE_LIGHTRAG_DIR),
+                        "graph_size_kb": status.get("graph_size_kb", 0),
+                        "doc_count": status.get("doc_count", 0)}
+
+            store = _get_unified_lightrag_store()
             status = store.get_status()
             if not status.get("graph_exists"):
                 return {"status": "unavailable", "message": "Knowledge graph is not built"}
             mode = graph_mode if graph_mode in {"local", "global", "hybrid"} else "local"
             context = await store.aquery(query, mode=mode, only_need_context=True)
-            result["api_graph_context" if source == "api_graph" else "game_code_context"] = context
+            result["api_graph_context"] = context
             return {"status": "ok" if context else "empty", "mode": mode,
                     "graph_size_kb": status.get("graph_size_kb", 0), "doc_count": status.get("doc_count", 0)}
         except asyncio.TimeoutError:
@@ -101,7 +174,7 @@ async def arun_knowledge_unified_search(query: str, sources: list | None = None,
     parts = []
     for item in result["vector_results"]:
         parts.append(f"[vector:{item['id']}]\n{item.get('content', item['content_preview'])}")
-    for key in ("api_graph_context", "game_code_context"):
+    for key in ("api_graph_context", "game_code_context", "external_game_context"):
         if result[key]:
             parts.append(f"[{key}]\n{result[key]}")
     result["merged_answer"] = "\n\n".join(parts) or "No results found from enabled sources."
@@ -165,14 +238,52 @@ def register_rag_tools(mcp) -> None:
     async def knowledge_unified_search(query: str, sources: list = None, vector_results: int = 3,
                                        graph_mode: str = "local", include_graph_context: bool | None = None,
                                        include_full_content: bool = False) -> str:
-        """Fast vector retrieval by default. Use sources=['api_graph', 'game_code_graph'] for graph relationships."""
+        """Fast vector retrieval by default. Use sources=['api_graph', 'game_code_graph', or 'external_game_graph'] for graph relationships."""
         return json.dumps(await arun_knowledge_unified_search(query, sources, vector_results, graph_mode,
                           include_graph_context, include_full_content), ensure_ascii=False)
 
-    async def graph_search(query, mode, only_need_context, game=False):
-        source = "game_code_graph" if game else "api_graph"
-        store = _get_unified_game_code_lightrag_store() if game else _get_unified_lightrag_store()
+    async def graph_search(query, mode, only_need_context, game=False, external=False):
+        source = "external_game_graph" if external else ("game_code_graph" if game else "api_graph")
         try:
+            if game:
+                from services.tools.game_code_tools import search_game_code_graph_context
+
+                applied_mode, top_k, traverse_depth = _game_graph_search_params(mode)
+                payload = await asyncio.to_thread(search_game_code_graph_context, query, top_k, traverse_depth)
+                status = payload.get("status", "error")
+                if status in {"unavailable", "error"}:
+                    return {
+                        "status": status,
+                        "query": query,
+                        "error": payload.get("error", "Game source RAG is not available"),
+                        "source_breakdown": {source: {"status": status}},
+                    }
+                text = json.dumps(payload.get("result", {}), ensure_ascii=False, indent=2)
+                return {
+                    "status": status,
+                    "query": query,
+                    "mode": applied_mode,
+                    "mode_applied_as": {"top_k": top_k, "traverse_depth": traverse_depth},
+                    "result": text,
+                    "source_breakdown": {source: {"status": status, "root": "Server/data/game-rag-knowledge-base"}},
+                }
+
+            if external:
+                store = _get_external_game_code_lightrag_store()
+                status = store.get_status()
+                if not status.get("graph_exists"):
+                    return {"status": "unavailable", "query": query, "mode": mode,
+                            "error": "External game graph is not built",
+                            "source_breakdown": {source: {"status": "unavailable",
+                                                             "root": str(_EXTERNAL_GAME_CODE_LIGHTRAG_DIR)}}}
+                applied_mode = mode if mode in {"local", "global", "hybrid", "naive"} else "hybrid"
+                text = await store.aquery(query, mode=applied_mode, only_need_context=only_need_context)
+                return {"status": "ok" if text else "empty", "query": query, "mode": applied_mode,
+                        "result": text, "graph_status": status,
+                        "source_breakdown": {source: {"status": "ok" if text else "empty",
+                                                     "root": str(_EXTERNAL_GAME_CODE_LIGHTRAG_DIR)}}}
+
+            store = _get_unified_lightrag_store()
             status = store.get_status()
             if not status.get("graph_exists"):
                 return {"status": "unavailable", "query": query, "error": "Knowledge graph is not built",
@@ -199,15 +310,21 @@ def register_rag_tools(mcp) -> None:
 
     @mcp.tool(tags={"group:rag"})
     async def knowledge_graph_search_game_code(query: str, mode: str = "hybrid", only_need_context: bool = True) -> str:
-        """Explicit game code graph search."""
+        """Search the current project's game-rag source graph; mode maps to top_k and traversal depth."""
         return json.dumps(await graph_search(query, mode, only_need_context, game=True), ensure_ascii=False)
+
+    @mcp.tool(tags={"group:rag"})
+    async def knowledge_graph_search_external_game_code(query: str, mode: str = "hybrid", only_need_context: bool = True) -> str:
+        """Search the optional cross-project game-pattern LightRAG under base_kb."""
+        return json.dumps(await graph_search(query, mode, only_need_context, external=True), ensure_ascii=False)
 
     @mcp.tool(
         name="knowledge_index",
         description="""Index Unity API documentation into the RAG knowledge base.
 
-This tool indexes PDF documents or JSON files into the ChromaDB vector store
-for semantic search. Use this after converting new PDFs to JSON.
+This tool indexes structured JSON files into the Unity API ChromaDB vector store
+for semantic search. Convert and clean PDF content into the expected JSON schema first;
+the tool itself does not parse PDF files.
 
 Supports:
 - Indexing from a directory of JSON files
@@ -334,10 +451,13 @@ Supports:
                 "available_modules": [],
             }
 
-            # 内置基础模块
+            # 内置基础模块。当前项目源码 RAG 的构建状态由
+            # get_game_code_module_status() 单独报告，避免把“代码目录存在”误报成“索引已就绪”。
             catalog_modules = catalog.get("modules", {})
             base_path = _BASE_KB_DIR
             for mod_id, mod_info in catalog_modules.items():
+                if mod_id == "game_source_code":
+                    continue
                 module_entry = {
                     "id": mod_id,
                     "name": mod_info.get("name", mod_id),
@@ -349,8 +469,13 @@ Supports:
                 }
 
                 if mod_info.get("builtin"):
-                    # 检查基础模块是否真的存在
-                    if base_path.exists():
+                    # 基础模块至少需要包含向量库和 API 图谱目录。
+                    ready = (
+                        base_path.exists()
+                        and (base_path / "chroma_db_v3").is_dir()
+                        and (base_path / "lightrag_db_v3_structured").is_dir()
+                    )
+                    if ready:
                         module_entry["size_mb"] = mod_info.get("size_mb", 0)
                         module_entry["status"] = "active"
                     else:
@@ -358,7 +483,26 @@ Supports:
                         module_entry["installed"] = False
                     result["installed_modules"].append(module_entry)
                 else:
-                    # 检查扩展模块是否已安装
+                    # ext_game_patterns lives under base_kb when built, so it needs
+                    # a dedicated disk check instead of the generic ext_kb scan.
+                    if mod_id == "ext_game_patterns":
+                        external_status = _get_external_game_code_module_status()
+                        module_entry.update({
+                            "root": external_status["root"],
+                            "source": external_status["source"],
+                            "retrieval_tool": "knowledge_graph_search_external_game_code",
+                            "retrieval_source": "external_game_graph",
+                            "installed": external_status["installed"],
+                            "status": external_status["status"],
+                        })
+                        if external_status["status"] == "active":
+                            result["installed_modules"].append(module_entry)
+                        else:
+                            module_entry["estimated_size_mb"] = mod_info.get("estimated_size_mb")
+                            result["available_modules"].append(module_entry)
+                        continue
+
+                    # Check generic extension modules under ext_kb/.
                     ext_match = [m for m in ext_mods if m["id"] == mod_id]
                     if ext_match:
                         module_entry.update(ext_match[0])
@@ -398,34 +542,9 @@ Supports:
                     "error": str(game_exc),
                 }
 
-            # ── 游戏源码 LightRAG 图谱状态 ──────────────────────────
-            try:
-                from services.rag.lightrag_store import (
-                    get_game_code_lightrag_store,
-                    GAME_CODE_DEFAULT_WORKING_DIR,
-                )
-                gc_store = get_game_code_lightrag_store(
-                    working_dir=GAME_CODE_DEFAULT_WORKING_DIR
-                )
-                gc_status = gc_store.get_status()
-
-                result["game_code_lightrag"] = {
-                    "id": "game_code_lightrag",
-                    "name": "游戏源码 LightRAG 知识图谱",
-                    "description": "跨游戏项目代码关系推理图谱",
-                    "status": "active" if gc_status.get("graph_exists") else "not_built",
-                    "working_dir": GAME_CODE_DEFAULT_WORKING_DIR,
-                    "graph_exists": gc_status.get("graph_exists", False),
-                    "graph_size_kb": gc_status.get("graph_size_kb", 0) if gc_status.get("graph_exists") else 0,
-                    "doc_count": gc_status.get("doc_count", 0),
-                    "llm_model": gc_status.get("llm_model", ""),
-                }
-            except Exception as gc_exc:
-                result["game_code_lightrag"] = {
-                    "id": "game_code_lightrag",
-                    "status": "error",
-                    "error": str(gc_exc),
-                }
+            # Keep the optional cross-project LightRAG visible without confusing it
+            # with the current project's game-rag-knowledge-base.
+            result["external_game_code"] = _get_external_game_code_module_status()
 
             return json.dumps(result, ensure_ascii=False, indent=2)
 

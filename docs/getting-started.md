@@ -44,7 +44,7 @@ CodeBuddy JSON 模板见 `mcp.json.template`，其中 `{{PRODUCT_ROOT}}` 替换�
 knowledge_search(query="Rigidbody.AddForce", include_full_content=True)
 knowledge_unified_search(query="中文描述的 Unity API 问题")
 knowledge_unified_search(query="GameObject 和 Component 的关系", sources=["vector", "api_graph"])
-knowledge_unified_search(query="项目中类和方法的调用关系", sources=["game_code_graph"])
+knowledge_unified_search(query="项目中类和方法的调用关系", sources=["game_code_graph"])  # 当前项目源码 RAG
 ```
 
 默认检索只走向量。需要源码搜索和适配时参考 [源码工作流](game-code-rag-workflow.md)，资产操作参考 [资产库工作流](asset-graphrag-workflow.md)。
@@ -52,3 +52,6 @@ knowledge_unified_search(query="项目中类和方法的调用关系", sources=[
 AI 素材生成需要对应服务密钥；具体环境变量、输出目录、支持参数和验证范围见 [工具实现与配置](tool-implementation-validation.md)。
 
 项目测试可用 `run_tests(test_mode="EditMode")` 或 `run_tests(test_mode="PlayMode")`，运行前保存场景并等待编译成功。超时后可使用返回的 `run_id` 续查，见 [Unity 自动化测试](unity-test-runner.md)。
+
+
+当前项目源码 RAG 的构建入口是 `Server/data/game-rag-knowledge-base/build_game_rag.py`，构建产物位于其 `data/` 子目录；它不放在 `Server/data/base_kb/`。

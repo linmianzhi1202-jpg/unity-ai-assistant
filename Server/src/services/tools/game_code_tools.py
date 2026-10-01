@@ -196,6 +196,44 @@ async def _wait_for_compile_after_script_write(
     return compile_status, reconnect_error, compile_result, warnings
 
 
+def _resolve_game_rag_path(value: str) -> str:
+    """Resolve game-RAG config paths relative to game-rag-knowledge-base."""
+    if not value:
+        return value
+    path = Path(value)
+    return str(path if path.is_absolute() else (_GAME_RAG_ROOT / path).resolve())
+
+
+def _resolve_embedding_model_name(value: str) -> str:
+    """Resolve a local model directory while preserving Hugging Face model IDs."""
+    if not value:
+        return value
+    path = Path(value)
+    if path.is_absolute() or path.exists():
+        return str(path.resolve())
+    return value
+
+
+def _resolve_game_rag_config_paths(config: dict[str, Any]) -> dict[str, Any]:
+    """Normalize the two filesystem paths used by the game-source RAG."""
+    resolved = dict(config or {})
+    vector_store = dict(resolved.get("vector_store") or {})
+    graph = dict(resolved.get("graph") or {})
+    if vector_store.get("persist_directory"):
+        vector_store["persist_directory"] = _resolve_game_rag_path(vector_store["persist_directory"])
+    if graph.get("file_path"):
+        graph["file_path"] = _resolve_game_rag_path(graph["file_path"])
+    embedding = dict(resolved.get("embedding") or {})
+    local_embedding = dict(embedding.get("local") or {})
+    if local_embedding.get("model_name"):
+        local_embedding["model_name"] = _resolve_embedding_model_name(local_embedding["model_name"])
+    embedding["local"] = local_embedding
+    resolved["embedding"] = embedding
+    resolved["vector_store"] = vector_store
+    resolved["graph"] = graph
+    return resolved
+
+
 def _load_config() -> dict[str, Any]:
     if not _GAME_RAG_CONFIG.exists():
         return {}
@@ -204,7 +242,7 @@ def _load_config() -> dict[str, Any]:
     except ImportError as exc:
         raise RuntimeError("PyYAML is required to read config_game.yaml") from exc
     with open(_GAME_RAG_CONFIG, "r", encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
+        return _resolve_game_rag_config_paths(yaml.safe_load(f) or {})
 
 
 def _embedding_config_is_usable(config: dict[str, Any]) -> tuple[bool, str]:
@@ -218,6 +256,10 @@ def _embedding_config_is_usable(config: dict[str, Any]) -> tuple[bool, str]:
         return False, "Local embedding model_name is empty."
 
     model_path = Path(model_name)
+    # Hugging Face model IDs such as BAAI/bge-small-zh-v1.5 are valid;
+    # EmbeddingManager resolves them from its local cache or loads them.
+    if not model_path.is_absolute() and not model_path.exists():
+        return True, ""
     if not model_path.exists():
         return False, f"Local embedding path does not exist: {model_name}"
 
@@ -1123,6 +1165,37 @@ def _search_code(
     return results, "default"
 
 
+def search_game_code_graph_context(
+    query: str,
+    top_k: int = 5,
+    traverse_depth: int = 1,
+) -> dict[str, Any]:
+    """Run the packaged game-source vector+graph search for unified RAG."""
+    searcher = _get_searcher()
+    if not searcher:
+        return {
+            "status": "unavailable",
+            "query": query,
+            "error": _game_code_import_error or "Game source code RAG is not available.",
+            "module_status": get_game_code_module_status(),
+        }
+    try:
+        result = searcher.search_graph(
+            query=query,
+            top_k=max(1, min(20, int(top_k or 5))),
+            traverse_depth=max(1, min(3, int(traverse_depth or 1))),
+        )
+        has_results = bool(
+            result.get("vector_results")
+            or result.get("graph_results")
+            or result.get("call_chain")
+        )
+        return {"status": "ok" if has_results else "empty", "query": query, "result": result}
+    except Exception as exc:
+        logger.exception("Game source graph search failed")
+        return {"status": "error", "query": query, "error": str(exc)}
+
+
 def get_game_code_module_status() -> dict[str, Any]:
     """Return product-facing status for the external game source code RAG."""
     try:
@@ -1154,7 +1227,7 @@ def get_game_code_module_status() -> dict[str, Any]:
     }
 
     if not _GAME_RAG_ROOT.exists():
-        status["hint"] = "Expected Server/data/game-rag-knowledge-base under unity-ai-assistant-product."
+        status["hint"] = "Expected Server/data/game-rag-knowledge-base under unity-ai-assistant."
         return status
 
     if not _GAME_RAG_CONFIG.exists():

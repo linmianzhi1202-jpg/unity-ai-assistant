@@ -3,7 +3,7 @@
 一键将 game_code_graph.json 注入 LightRAG 知识图谱（零 LLM 调用）
 
 用法:
-    cd unity-ai-assistant-product/Server
+    cd unity-ai-assistant/Server
     python scripts/build_game_code_lightrag.py
 
 选项:

@@ -11,7 +11,7 @@ game_source/（你的游戏源码）
       ▼ build_game_rag.py
   ┌─────────────────────────────┐
   │ CodeProcessor               │  扫描 .cs，按类/方法智能分块
-  │ EmbeddingProvider           │  bge-small-zh-v1.5 本地嵌入
+  │ EmbeddingProvider           │  使用配置中的本地嵌入模型
   │ ChromaDB (game_source_code) │  向量存储
   └──────────┬──────────────────┘
              │
@@ -44,15 +44,14 @@ game_source/
 
 ### 3. 构建知识库
 
-```bash
-python build_game_rag.py
-```
+双击项目根目录下的 `build_game_rag.bat`（即 `Server/` 的上一级目录）完成构建；也可带参数运行：`build_game_rag.bat --stats` 查看统计、`build_game_rag.bat --clear` 全量重建。
 
 首次构建会：
-1. 扫描 `game_source/` 下所有游戏
-2. 提取所有 `.cs` 文件的类和方法
-3. 使用 `bge-small-zh-v1.5` 生成嵌入向量
-4. 存入 ChromaDB（集合名 `game_source_code`）
+1. 扫描 `game_source/` 下的 Unity 项目和 `.cs` 文件
+2. 提取类、字段和方法并生成代码块
+3. 使用 `config/config_game.yaml` 中配置的嵌入模型生成向量（默认 `BAAI/bge-small-zh-v1.5`）
+4. 写入 ChromaDB（集合名 `game_source_code`）
+5. 同时生成 `data/game_code_graph.json`，供跨类检索和调用关系查询
 
 ### 4. 通过 CodeBuddy 使用
 
@@ -77,7 +76,8 @@ game-rag-knowledge-base/
 │   └── config_game.yaml          # 配置文件
 ├── game_source/                  # 放你的游戏源码（约定目录）
 ├── data/
-│   └── chromadb/                 # ChromaDB 数据（构建后生成）
+│   ├── chromadb/                 # ChromaDB 数据（构建后生成）
+│   └── game_code_graph.json      # 代码关系图（构建后生成）
 ├── logs/
 │   └── game_rag.log              # 日志
 ├── src/
@@ -131,14 +131,25 @@ retrieval:
 
 ## CLI 命令
 
-```bash
-python build_game_rag.py              # 构建知识库
-python build_game_rag.py --clear      # 重建（清空后重新导入）
-python build_game_rag.py --stats      # 查看统计信息
-python build_game_rag.py --verbose    # 详细日志
+在项目根目录双击 `build_game_rag.bat`，或带参数运行：
+
+```powershell
+build_game_rag.bat              # 构建知识库
+build_game_rag.bat --clear      # 重建（清空后重新导入）
+build_game_rag.bat --stats      # 查看统计信息
+build_game_rag.bat --verbose    # 详细日志
 ```
 
-## 升级到 GraphRAG
+## 当前检索能力
 
-当前为 RAG（纯语义向量检索）阶段。升级 GraphRAG 时，可复用分块时提取的 `class_name`/`method_name` 等元数据，
-构建类继承关系图和方法调用图，实现图谱遍历 + 向量检索的混合检索。
+本模块已经同时生成向量索引和代码关系图：
+
+- `search_game_code`：按语义检索类、方法和文件代码块。
+- `search_game_code_graph`：在语义结果上扩展相关类、继承关系和调用链。
+- `knowledge_graph_search_game_code`：通过统一 MCP 图谱入口查询当前项目源码；`mode` 会映射为 `top_k` 和 `traverse_depth`。
+- `knowledge_unified_search(..., sources=["game_code_graph"])`：在统一检索中加入当前项目源码关系。
+
+它仍然是代码结构图 + 向量检索的混合实现，不等同于用大模型重新生成一套通用知识图谱。当前项目源码索引与 `Server/data/base_kb/` 的 Unity API 知识库完全分开。
+
+
+跨项目模式库位于 `Server/data/base_kb/lightrag_db_game_code`，由 `Server/scripts/build_game_code_lightrag.py` 构建，查询入口是 `knowledge_graph_search_external_game_code`；它与本目录的当前项目源码 RAG 分开维护。
