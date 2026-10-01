@@ -7,7 +7,7 @@ Codex / CodeBuddy → FastMCP → ChromaDB / LightRAG
                           → UnityBridge → Unity 编辑器插件
 ```
 
-默认使用 BAAI/bge-m3 向量检索；需要图谱关系时显式指定 `sources`。图谱使用 Ollama，默认模型 `gemma3:4b`，可通过 `UNITY_MCP_RAG_MODEL` 覆盖。缺少图谱或模型不影响 Unity 操作工具启动。
+Unity API 基础知识库默认使用 `BAAI/bge-m3` 向量检索；当前项目源码 RAG 独立使用 `config/config_game.yaml` 中的 `BAAI/bge-small-zh-v1.5`，两套索引不能混用；需要图谱关系时显式指定 `sources`。图谱使用 Ollama，默认模型 `gemma3:4b`，可通过 `UNITY_MCP_RAG_MODEL` 覆盖。缺少图谱或模型不影响 Unity 操作工具启动。
 
 ## 快速开始
 

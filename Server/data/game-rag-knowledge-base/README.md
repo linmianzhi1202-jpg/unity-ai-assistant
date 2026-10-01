@@ -51,7 +51,8 @@ game_source/
 2. 提取类、字段和方法并生成代码块
 3. 使用 `config/config_game.yaml` 中配置的嵌入模型生成向量（默认 `BAAI/bge-small-zh-v1.5`）
 4. 写入 ChromaDB（集合名 `game_source_code`）
-5. 同时生成 `data/game_code_graph.json`，供跨类检索和调用关系查询
+5. 生成 `data/game_code_lexical.sqlite3`，使用 SQLite FTS5/BM25 建立倒排索引
+6. 同时生成 `data/game_code_graph.json`，供跨类检索和调用关系查询
 
 ### 4. 通过 CodeBuddy 使用
 
@@ -110,6 +111,17 @@ vector_store:
 retrieval:
   top_k: 5
   score_threshold: 0.6
+  hybrid_enabled: true
+  candidate_multiplier: 4
+  rrf_k: 60
+  dense_weight: 0.55
+  lexical_weight: 0.30
+  rrf_weight: 0.15
+  lexical_index_path: "data/game_code_lexical.sqlite3"
+  rerank:
+    enabled: false
+    model_name: "BAAI/bge-reranker-v2-m3"
+    candidate_k: 30
 ```
 
 ## 分块策略
@@ -144,12 +156,13 @@ build_game_rag.bat --verbose    # 详细日志
 
 本模块已经同时生成向量索引和代码关系图：
 
-- `search_game_code`：按语义检索类、方法和文件代码块。
+- `search_game_code`：使用向量 + SQLite FTS5/BM25 混合召回，先扩大候选集，再用 RRF 融合；C# 驼峰标识符会拆分，中文会保留短语并补充二元片段。结果中的 `dense_score`、`lexical_score`、`rrf_score` 可用于诊断排序。
+- 可选 CrossEncoder 精排：在 `retrieval.rerank.enabled` 开启后，对混合召回候选懒加载 `BAAI/bge-reranker-v2-m3`；模型不可用时自动保留混合排序。Unity API 和 LightRAG 查询可分别使用 `UNITY_MCP_RERANK_ENABLED=1` 与 `UNITY_MCP_LIGHTRAG_RERANK_ENABLED=1` 开启。
 - `search_game_code_graph`：在语义结果上扩展相关类、继承关系和调用链。
 - `knowledge_graph_search_game_code`：通过统一 MCP 图谱入口查询当前项目源码；`mode` 会映射为 `top_k` 和 `traverse_depth`。
 - `knowledge_unified_search(..., sources=["game_code_graph"])`：在统一检索中加入当前项目源码关系。
 
-它仍然是代码结构图 + 向量检索的混合实现，不等同于用大模型重新生成一套通用知识图谱。当前项目源码索引与 `Server/data/base_kb/` 的 Unity API 知识库完全分开。
+它使用“向量召回 + 关键词召回 + RRF 融合 + 代码结构图扩展”：向量检索负责语义相似，关键词检索负责类名、方法名和路径等精确命中，图谱负责补全关系上下文。它不等同于用大模型重新生成一套通用知识图谱。当前项目源码索引与 `Server/data/base_kb/` 的 Unity API 知识库完全分开。
 
 
 跨项目模式库位于 `Server/data/base_kb/lightrag_db_game_code`，由 `Server/scripts/build_game_code_lightrag.py` 构建，查询入口是 `knowledge_graph_search_external_game_code`；它与本目录的当前项目源码 RAG 分开维护。

@@ -25,15 +25,18 @@ import logging
 from pathlib import Path
 
 # ---- 添加项目路径 ----
-_PROJECT_ROOT = Path(__file__).parent.parent  # data/
-_KB_DIR = Path(__file__).parent               # game-rag-knowledge-base/
-_GAME_RAG_SRC = _PROJECT_ROOT / "game-rag-knowledge-base" / "src"
-_SERVER_SRC = _PROJECT_ROOT.parent / "src"   # Server/src
+_KB_DIR = Path(__file__).resolve().parent
+_DATA_DIR = _KB_DIR.parent
+_SERVER_DIR = _DATA_DIR.parent
+_PROJECT_ROOT = _SERVER_DIR.parent
+_GAME_RAG_SRC = _KB_DIR / "src"
+_SERVER_SRC = _SERVER_DIR / "src"
 
 sys.path.insert(0, str(_GAME_RAG_SRC))
 sys.path.insert(0, str(_SERVER_SRC))
 
 from code_processor import CodeProcessor, create_processor, CodeChunk
+from services.rag.lexical_index import SQLiteLexicalIndex
 
 # chromadb 是独立 pip 包，分离导入避免被 services 错误连累
 try:
@@ -75,7 +78,7 @@ def load_config(config_path: str = None) -> dict:
     import yaml
 
     if config_path is None:
-        config_path = _PROJECT_ROOT / "game-rag-knowledge-base" / "config" / "config_game.yaml"
+        config_path = _KB_DIR / "config" / "config_game.yaml"
     else:
         config_path = Path(config_path)
 
@@ -298,7 +301,34 @@ def build_knowledge_base(
             except Exception as e:
                 logger.debug(f"资产处理失败: {asset_file.name}: {e}")
 
-    # 5. 构建/合并代码知识图谱 (GraphRAG)
+    # 5. Rebuild the SQLite FTS5 inverted index from the authoritative Chroma
+    # collection.  This also repairs an index left behind by an interrupted
+    # incremental build and avoids the old collection.get(limit=5000) scan.
+    try:
+        retrieval_config = config.get("retrieval", {}) or {}
+        lexical_path = retrieval_config.get("lexical_index_path") or str(
+            Path(persist_dir).parent / "game_code_lexical.sqlite3"
+        )
+        lexical_path = _resolve_path(lexical_path)
+        raw_records = collection.get(include=["documents", "metadatas"])
+        records = [
+            {
+                "id": item_id,
+                "document": (raw_records.get("documents") or [])[i] if i < len(raw_records.get("documents") or []) else "",
+                "metadata": (raw_records.get("metadatas") or [])[i] if i < len(raw_records.get("metadatas") or []) else {},
+            }
+            for i, item_id in enumerate(raw_records.get("ids") or [])
+        ]
+        lexical_index = SQLiteLexicalIndex(lexical_path)
+        lexical_count = lexical_index.replace_all(records)
+        lexical_index.close()
+        stats["lexical_index_count"] = lexical_count
+        stats["lexical_index_path"] = lexical_path
+        logger.info("  SQLite FTS5/BM25 索引: %s 条", lexical_count)
+    except Exception as exc:
+        logger.warning("SQLite FTS5 索引构建失败，向量检索仍可用: %s", exc)
+
+    # 6. 构建/合并代码知识图谱 (GraphRAG)
     try:
         from code_graph_extractor import CodeGraphExtractor
         import json as _json

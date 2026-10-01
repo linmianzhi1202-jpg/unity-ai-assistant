@@ -44,6 +44,17 @@ vector_store:
 retrieval:
   top_k: 5
   score_threshold: 0.6
+  hybrid_enabled: true
+  candidate_multiplier: 4
+  rrf_k: 60
+  dense_weight: 0.55
+  lexical_weight: 0.30
+  rrf_weight: 0.15
+  lexical_index_path: "data/game_code_lexical.sqlite3"
+  rerank:
+    enabled: false
+    model_name: "BAAI/bge-reranker-v2-m3"
+    candidate_k: 30
 
 # ============================================================
 # 知识图谱配置 (GraphRAG)

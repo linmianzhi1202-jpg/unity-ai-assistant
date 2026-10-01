@@ -18,6 +18,8 @@
         "knowledge_graph_search",
         "knowledge_unified_search",
         "knowledge_modules",
+        "knowledge_graph_search_game_code",
+        "knowledge_graph_search_external_game_code",
         "knowledge_index",
         "search_game_code",
         "search_game_code_graph",

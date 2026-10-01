@@ -306,12 +306,32 @@ class LightRAGStore:
             if query is None:
                 return None
             from lightrag import QueryParam
+            rerank_enabled = os.getenv("UNITY_MCP_LIGHTRAG_RERANK_ENABLED", "0").strip().lower() in {
+                "1", "true", "yes", "on"
+            }
             try:
-                return await self.rag.aquery(query, param=QueryParam(
+                params = dict(
                     mode=mode, only_need_context=only_need_context,
                     max_total_tokens=6000, max_entity_tokens=1500, max_relation_tokens=1500,
-                    enable_rerank=False,
-                ))
+                    enable_rerank=rerank_enabled,
+                )
+                try:
+                    return await self.rag.aquery(query, param=QueryParam(**params))
+                except TypeError as exc:
+                    # Older LightRAG versions do not expose enable_rerank.
+                    # Remove only that optional field and keep the query usable.
+                    if "enable_rerank" not in str(exc):
+                        raise
+                    params.pop("enable_rerank", None)
+                    return await self.rag.aquery(query, param=QueryParam(**params))
+                except Exception:
+                    if not rerank_enabled:
+                        raise
+                    # The flag may exist while the installed reranker/model is
+                    # unavailable. Preserve service availability by retrying.
+                    logger.warning("LightRAG rerank failed; retrying without rerank", exc_info=True)
+                    params["enable_rerank"] = False
+                    return await self.rag.aquery(query, param=QueryParam(**params))
             finally:
                 # LightRAG queues detach model calls from aquery cancellation.
                 # Drain this store's active calls before releasing the query gate.

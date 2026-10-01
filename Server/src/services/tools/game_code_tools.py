@@ -51,7 +51,6 @@ _GAME_RAG_CONFIG = _GAME_RAG_ROOT / "config" / "config_game.yaml"
 
 _game_code_searcher = None
 _game_code_import_error: str | None = None
-_KEYWORD_SCAN_LIMIT = 5000
 _SEMANTIC_SEARCH_TIMEOUT_SECONDS = float(os.getenv("UNITY_MCP_GAME_CODE_SEARCH_TIMEOUT", "12"))
 
 # Default code types returned by search (excludes asset types: scene, material, asset, packages)
@@ -219,10 +218,13 @@ def _resolve_game_rag_config_paths(config: dict[str, Any]) -> dict[str, Any]:
     resolved = dict(config or {})
     vector_store = dict(resolved.get("vector_store") or {})
     graph = dict(resolved.get("graph") or {})
+    retrieval = dict(resolved.get("retrieval") or {})
     if vector_store.get("persist_directory"):
         vector_store["persist_directory"] = _resolve_game_rag_path(vector_store["persist_directory"])
     if graph.get("file_path"):
         graph["file_path"] = _resolve_game_rag_path(graph["file_path"])
+    if retrieval.get("lexical_index_path"):
+        retrieval["lexical_index_path"] = _resolve_game_rag_path(retrieval["lexical_index_path"])
     embedding = dict(resolved.get("embedding") or {})
     local_embedding = dict(embedding.get("local") or {})
     if local_embedding.get("model_name"):
@@ -231,6 +233,7 @@ def _resolve_game_rag_config_paths(config: dict[str, Any]) -> dict[str, Any]:
     resolved["embedding"] = embedding
     resolved["vector_store"] = vector_store
     resolved["graph"] = graph
+    resolved["retrieval"] = retrieval
     return resolved
 
 
@@ -352,6 +355,11 @@ def _format_code_result(item: dict[str, Any]) -> dict[str, Any]:
         "line_start": _metadata_value(metadata, "line_start", None),
         "line_end": _metadata_value(metadata, "line_end", None),
         "score": item.get("score"),
+        "dense_score": item.get("dense_score"),
+        "lexical_score": item.get("lexical_score"),
+        "rrf_score": item.get("rrf_score"),
+        "search_mode": item.get("search_mode", "dense"),
+        "rerank_score": item.get("rerank_score"),
         "summary": _summarize_code(text, class_name, method_name, code_type),
         "reuse_hint": _reuse_hint(class_name, method_name, code_type),
         "text": text,
@@ -1042,65 +1050,35 @@ def _keyword_search_code(
     code_type: str = "",
     include_assets: bool = False,
 ) -> list[dict[str, Any]]:
-    config = _load_config()
-    vector_dir = config.get("vector_store", {}).get("persist_directory", "")
-    collection_name = config.get("vector_store", {}).get("collection_name", "game_source_code")
-    if not vector_dir:
-        return [{"error": "Game code vector_store.persist_directory is not configured."}]
-
+    """Fast lexical fallback backed by the same SQLite FTS5 index as hybrid search."""
     try:
-        import chromadb
-
-        client = chromadb.PersistentClient(path=str(vector_dir))
-        collection = client.get_collection(collection_name)
-    except Exception as exc:
-        return [{"error": f"Failed to open game code ChromaDB collection: {exc}"}]
-
-    where: dict[str, Any] = {}
-    if game_name:
-        where["game_name"] = game_name
-    if class_name:
-        where["class_name"] = class_name
-    if code_type:
-        where["code_type"] = code_type
-
-    try:
-        raw = collection.get(
-            where=where if where else None,
-            include=["documents", "metadatas"],
-            limit=_KEYWORD_SCAN_LIMIT,
+        from services.rag.lexical_index import SQLiteLexicalIndex
+        config = _load_config()
+        retrieval = config.get("retrieval", {}) or {}
+        path = retrieval.get("lexical_index_path") or str(
+            _GAME_RAG_ROOT / "data" / "game_code_lexical.sqlite3"
         )
-    except Exception:
-        raw = collection.get(include=["documents", "metadatas"], limit=_KEYWORD_SCAN_LIMIT)
-
-    ids = raw.get("ids", []) or []
-    documents = raw.get("documents", []) or []
-    metadatas = raw.get("metadatas", []) or []
-    terms = _keyword_terms(query)
-    ranked: list[dict[str, Any]] = []
-
-    for doc_id, text, metadata in zip(ids, documents, metadatas):
-        metadata = metadata or {}
-        if game_name and str(metadata.get("game_name", "")).lower() != game_name.lower():
-            continue
-        if class_name and str(metadata.get("class_name", "")).lower() != class_name.lower():
-            continue
-        if code_type and str(metadata.get("code_type", "")).lower() != code_type.lower():
-            continue
-        if not include_assets and metadata.get("code_type", "") not in _CODE_TYPES:
-            continue
-        score = _keyword_score({"text": text, "metadata": metadata}, terms, class_name, code_type)
-        if score <= 0:
-            continue
-        ranked.append({
-            "id": doc_id,
-            "text": text,
-            "metadata": metadata,
-            "score": score,
-        })
-
-    ranked.sort(key=lambda item: item.get("score", 0), reverse=True)
-    return ranked[: max(1, min(20, top_k))]
+        filters: dict[str, Any] = {}
+        if game_name:
+            filters["game_name"] = game_name
+        if class_name:
+            filters["class_name"] = class_name
+        if code_type:
+            filters["code_type"] = code_type
+        elif not include_assets:
+            filters["code_type"] = {"$in": sorted(_CODE_TYPES)}
+        index = SQLiteLexicalIndex(path)
+        try:
+            rows = index.search(query, limit=max(1, min(20, top_k)), filters=filters)
+        finally:
+            index.close()
+        return [{"id": row["id"], "text": row.get("document", ""),
+                 "metadata": row.get("metadata") or {}, "score": row.get("score", 0.0),
+                 "lexical_score": row.get("score", 0.0), "search_mode": "lexical"}
+                for row in rows]
+    except Exception as exc:
+        logger.warning("SQLite lexical fallback failed: %s", exc)
+        return [{"error": str(exc)}]
 
 
 async def _search_code_with_timeout(
