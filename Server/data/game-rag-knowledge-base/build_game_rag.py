@@ -510,7 +510,7 @@ def main():
     # 增量模式：读取已处理游戏列表
     skip_games = set()
     processed_file = os.path.join(
-        config.get('vector_store', {}).get('persist_directory', ''),
+        _resolve_path(config.get('vector_store', {}).get('persist_directory', '')),
         '..', 'processed_games.json'
     )
     processed_file = os.path.normpath(processed_file)
@@ -541,7 +541,7 @@ def main():
     if not args.clear:
         try:
             processor = create_processor(
-                config.get('source', {}).get('root_directory', ''),
+                _resolve_path(config.get('source', {}).get('root_directory', '')),
                 config.get('source', {})
             )
             all_games = {
